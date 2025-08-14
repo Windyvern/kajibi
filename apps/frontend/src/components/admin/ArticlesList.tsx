@@ -21,7 +21,7 @@ export const ArticlesList = ({ articles, onEditArticle }: ArticlesListProps) => 
               <div className="flex-shrink-0">
                 {article.thumbnail && (
                   <img
-                    src={`https://images.unsplash.com/${article.thumbnail}?ixlib=rb-4.0.3&auto=format&fit=crop&w=120&h=120&q=80`}
+                    src={article.thumbnail}
                     alt={article.title}
                     className="w-20 h-20 rounded-lg object-cover"
                   />

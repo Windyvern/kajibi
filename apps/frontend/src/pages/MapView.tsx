@@ -99,7 +99,7 @@ const MapView = () => {
                       <div className="flex gap-3">
                         {story.thumbnail && (
                           <img
-                            src={`https://images.unsplash.com/${story.thumbnail}?ixlib=rb-4.0.3&auto=format&fit=crop&w=80&h=80&q=80`}
+                            src={story.thumbnail}
                             alt={story.title}
                             className="w-16 h-16 rounded-lg object-cover"
                           />

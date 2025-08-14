@@ -64,7 +64,7 @@ export const StoryHighlights = ({
                 }`}
               >
                 <img
-                  src={`https://images.unsplash.com/${highlight.thumbnail}?ixlib=rb-4.0.3&auto=format&fit=crop&w=64&h=64&q=80`}
+                  src={highlight.thumbnail}
                   alt={highlight.title}
                   className="w-full h-full object-cover"
                 />

@@ -84,7 +84,7 @@ export const LatestArticlesGallery = () => {
               <div className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg">
                 {/* Thumbnail Image */}
                 <img
-                  src={`https://images.unsplash.com/${story.thumbnail}?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=533&q=80`}
+                  src={story.thumbnail}
                   alt={story.title}
                   className="w-full h-full object-cover"
                 />
