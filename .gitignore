@@ -1,0 +1,37 @@
+﻿# Node / Next
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+.vercel/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+.env
+.env.*
+.mypy_cache/
+.pytest_cache/
+.coverage*
+htmlcov/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker/dev
+*.localdev
+docker-data/
