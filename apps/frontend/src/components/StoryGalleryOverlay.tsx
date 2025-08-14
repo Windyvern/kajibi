@@ -42,7 +42,7 @@ export const StoryGalleryOverlay = ({
           >
             {panel.type === "image" && panel.media ? (
               <img
-                src={`https://images.unsplash.com/${panel.media}?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80`}
+                src={panel.media}
                 alt={panel.title || `Panel ${index + 1}`}
                 className="w-full h-full object-cover"
               />

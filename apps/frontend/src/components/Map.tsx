@@ -213,9 +213,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId }: MapProps) => {
       if (!story.geo) return;
 
       const thumbnailPanel = story.panels.find(p => p.id === story.thumbnailPanelId) || story.panels[0];
-      const thumbnailUrl = thumbnailPanel?.media 
-        ? `https://images.unsplash.com/${thumbnailPanel.media}?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&h=200&q=80`
-        : null;
+      const thumbnailUrl = thumbnailPanel?.media || null;
 
       const isSelected = story.id === selectedStoryId;
 

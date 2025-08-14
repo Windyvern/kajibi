@@ -1,73 +1,98 @@
-
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { Story } from '@/types/story';
+import { strapiFetch, STRAPI_URL } from '@/integrations/strapi/client';
+import { Story, StoryPanelData } from '@/types/story';
+
+function getMediaUrl(file: any): string | undefined {
+  if (!file) return undefined;
+  if (typeof file === 'string') {
+    return `${STRAPI_URL}/uploads/${file}`;
+  }
+  if (file.data?.attributes?.url) {
+    return `${STRAPI_URL}${file.data.attributes.url}`;
+  }
+  if (file.url) {
+    return `${STRAPI_URL}${file.url}`;
+  }
+  return undefined;
+}
 
 export const useStories = () => {
   return useQuery({
     queryKey: ['stories'],
     queryFn: async (): Promise<Story[]> => {
-      console.log('Fetching stories from Supabase...');
-      
-      const { data: storiesData, error: storiesError } = await supabase
-        .from('stories')
-        .select('*')
-        .order('published_at', { ascending: false });
+      const response = await strapiFetch<any>(
+        '/api/articles',
+        'populate=author,cover,blocks,blocks.file,blocks.files'
+      );
+      const articles = response.data;
 
-      if (storiesError) {
-        console.error('Error fetching stories:', storiesError);
-        throw storiesError;
-      }
+      return articles.map((article: any) => {
+        const attrs = article.attributes;
+        const panels: StoryPanelData[] = [];
 
-      console.log('Fetched stories:', storiesData);
+        (attrs.blocks || []).forEach((block: any, index: number) => {
+          switch (block.__component) {
+            case 'shared.rich-text':
+              panels.push({
+                id: `${article.id}-rich-${index}`,
+                type: 'text',
+                content: block.body,
+                orderIndex: index,
+              });
+              break;
+            case 'shared.quote':
+              panels.push({
+                id: `${article.id}-quote-${index}`,
+                type: 'quote',
+                title: block.title,
+                content: block.body,
+                orderIndex: index,
+              });
+              break;
+            case 'shared.media':
+              panels.push({
+                id: `${article.id}-media-${index}`,
+                type: 'image',
+                media: getMediaUrl(block.file),
+                orderIndex: index,
+              });
+              break;
+            case 'shared.slider':
+              (block.files || []).forEach((file: any, fileIndex: number) => {
+                panels.push({
+                  id: `${article.id}-slider-${index}-${fileIndex}`,
+                  type: 'image',
+                  media: getMediaUrl(file),
+                  orderIndex: index + fileIndex / 100,
+                });
+              });
+              break;
+          }
+        });
 
-      // Fetch panels for all stories
-      const storyIds = storiesData.map(story => story.id);
-      const { data: panelsData, error: panelsError } = await supabase
-        .from('story_panels')
-        .select('*')
-        .in('story_id', storyIds)
-        .order('order_index', { ascending: true });
+        const imagePanel = panels.find(p => p.type === 'image');
 
-      if (panelsError) {
-        console.error('Error fetching panels:', panelsError);
-        throw panelsError;
-      }
-
-      console.log('Fetched panels:', panelsData);
-
-      // Transform database data to match our Story interface
-      const stories: Story[] = storiesData.map(story => ({
-        id: story.id,
-        title: story.title,
-        author: story.author,
-        subtitle: story.subtitle || undefined,
-        handle: story.handle || undefined,
-        publishedAt: story.published_at,
-        thumbnail: story.thumbnail || undefined,
-        thumbnailPanelId: story.thumbnail_panel_id || undefined,
-        tags: story.tags || undefined,
-        address: story.address || undefined,
-        description: story.description || undefined,
-        geo: story.latitude && story.longitude ? {
-          lat: parseFloat(story.latitude.toString()),
-          lng: parseFloat(story.longitude.toString())
-        } : undefined,
-        panels: panelsData
-          .filter(panel => panel.story_id === story.id)
-          .map(panel => ({
-            id: panel.id,
-            type: panel.type as "text" | "image" | "video" | "quote",
-            title: panel.title || undefined,
-            content: panel.content || undefined,
-            media: panel.media || undefined,
-            duration: panel.duration || undefined,
-            orderIndex: panel.order_index
-          }))
-      }));
-
-      console.log('Transformed stories:', stories);
-      return stories;
+        return {
+          id: article.id.toString(),
+          title: attrs.title,
+          author: attrs.author?.data?.attributes?.name || '',
+          subtitle: undefined,
+          handle: attrs.slug,
+          publishedAt: attrs.publishedAt || attrs.createdAt,
+          panels,
+          thumbnail: attrs.cover?.data?.attributes?.url
+            ? `${STRAPI_URL}${attrs.cover.data.attributes.url}`
+            : imagePanel?.media,
+          thumbnailPanelId: imagePanel?.id,
+          tags: undefined,
+          address: undefined,
+          description: attrs.description,
+          geo:
+            attrs.latitude && attrs.longitude
+              ? { lat: Number(attrs.latitude), lng: Number(attrs.longitude) }
+              : undefined,
+        } as Story;
+      });
     },
   });
 };

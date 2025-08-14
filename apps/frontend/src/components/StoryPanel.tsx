@@ -27,11 +27,13 @@ export const StoryPanel = ({ panel }: StoryPanelProps) => {
       case "image":
         return (
           <div className="relative h-full">
-            <img
-              src={`https://images.unsplash.com/${panel.media}?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80`}
-              alt={panel.title || "Story image"}
-              className="w-full h-full object-cover"
-            />
+            {panel.media && (
+              <img
+                src={panel.media}
+                alt={panel.title || "Story image"}
+                className="w-full h-full object-cover"
+              />
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             {(panel.title || panel.content) && (
               <div className="absolute bottom-0 left-0 right-0 p-8">
