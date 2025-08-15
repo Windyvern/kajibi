@@ -2,6 +2,7 @@
 import { ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { STRAPI_URL } from '@/integrations/strapi/client';
 
 const AdminDashboard = () => {
 
@@ -27,8 +28,8 @@ const AdminDashboard = () => {
               <p className="text-gray-600">
                 Access your Strapi dashboard to create and manage stories, upload media, and configure content.
               </p>
-              <Button 
-                onClick={() => window.open('http://localhost:1337/admin', '_blank')}
+              <Button
+                onClick={() => window.open(`${STRAPI_URL}/admin`, '_blank')}
                 className="flex items-center gap-2"
               >
                 <ExternalLink size={16} />
