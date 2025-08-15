@@ -11,6 +11,7 @@ import { STRAPI_URL } from '@/integrations/strapi/client';
 const AdminDashboard = () => {
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const { data: articles = [] } = useAdminStories();
+  const openStrapiDashboard = () => window.open(`${STRAPI_URL}/admin`, '_blank');
 
   if (editingArticleId !== null) {
     return (
@@ -54,7 +55,7 @@ const AdminDashboard = () => {
                 Access your Strapi dashboard to create and manage stories, upload media, and configure content.
               </p>
               <Button
-                onClick={() => window.open(`${STRAPI_URL}/admin`, '_blank')}
+                onClick={openStrapiDashboard}
                 className="flex items-center gap-2"
               >
                 <ExternalLink size={16} />
