@@ -4,22 +4,23 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit, MapPin, Eye } from 'lucide-react';
-import { STRAPI_URL } from '@/integrations/strapi/client';
+<<<<<<< HEAD
+import { useAdminStories } from '@/hooks/useAdminStories';
 
 interface ArticlesListProps {
-  articles: Story[];
+  onEditArticle: (articleId: string) => void;
 }
 
-export const ArticlesList = ({ articles }: ArticlesListProps) => {
-  const onEditArticle = (articleId: string) => {
-    window.open(
-      `${STRAPI_URL}/admin/content-manager/collectionType/api::article.article/${articleId}`,
-      '_blank'
-    );
-  };
+export const ArticlesList = ({ onEditArticle }: ArticlesListProps) => {
+  const { data: articles = [], isLoading } = useAdminStories();
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
   return (
     <div className="grid gap-4">
-      {articles.map((article) => (
+      {articles.map((article: Story) => (
         <Card key={article.id} className="hover:shadow-md transition-shadow">
           <CardContent className="p-6">
             <div className="flex gap-4">
