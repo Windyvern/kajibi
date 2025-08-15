@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArticlesList } from '@/components/admin/ArticlesList';
 import { ArticleEditor } from '@/components/admin/ArticleEditor';
 import { useAdminStories } from '@/hooks/useAdminStories';
+import { STRAPI_URL } from '@/integrations/strapi/client';
 
 const AdminDashboard = () => {
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
@@ -53,7 +54,7 @@ const AdminDashboard = () => {
                 Access your Strapi dashboard to create and manage stories, upload media, and configure content.
               </p>
               <Button
-                onClick={() => window.open('http://localhost:1337/admin', '_blank')}
+                onClick={() => window.open(`${STRAPI_URL}/admin`, '_blank')}
                 className="flex items-center gap-2"
               >
                 <ExternalLink size={16} />
