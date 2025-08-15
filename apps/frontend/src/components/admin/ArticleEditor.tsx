@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Story, StoryPanelData } from '@/types/story';
-import { sampleStories } from '@/data/sampleStories';
+import { useStory } from '@/hooks/useStory';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 interface ArticleEditorProps {
@@ -20,10 +20,10 @@ export const ArticleEditor = ({ articleId, onBack }: ArticleEditorProps) => {
   const [article, setArticle] = useState<Story | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [newTag, setNewTag] = useState('');
+  const { data: existingArticle } = useStory(articleId || '');
 
   useEffect(() => {
     if (articleId) {
-      const existingArticle = sampleStories.find(s => s.id === articleId);
       if (existingArticle) {
         setArticle(existingArticle);
       }
@@ -45,7 +45,7 @@ export const ArticleEditor = ({ articleId, onBack }: ArticleEditorProps) => {
         panels: []
       });
     }
-  }, [articleId]);
+  }, [articleId, existingArticle]);
 
   const handleSave = async () => {
     if (!article) return;
