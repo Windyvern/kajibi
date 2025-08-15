@@ -4,13 +4,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit, MapPin, Eye } from 'lucide-react';
+import { STRAPI_URL } from '@/integrations/strapi/client';
 
 interface ArticlesListProps {
   articles: Story[];
-  onEditArticle: (articleId: string) => void;
 }
 
-export const ArticlesList = ({ articles, onEditArticle }: ArticlesListProps) => {
+export const ArticlesList = ({ articles }: ArticlesListProps) => {
+  const onEditArticle = (articleId: string) => {
+    window.open(
+      `${STRAPI_URL}/admin/content-manager/collectionType/api::article.article/${articleId}`,
+      '_blank'
+    );
+  };
   return (
     <div className="grid gap-4">
       {articles.map((article) => (
