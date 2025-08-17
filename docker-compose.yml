@@ -19,7 +19,7 @@ services:
     ports:
       - "1337:1337"
     volumes:
-      - ./apps/backend:/app
+      - ./apps/backend:/opt/app
     depends_on:
       - postgres
     command: npm run develop
