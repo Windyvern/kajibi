@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-<<<<<<< HEAD
 import { ArticlesList } from '@/components/admin/ArticlesList';
 import { ArticleEditor } from '@/components/admin/ArticleEditor';
 import { useAdminStories } from '@/hooks/useAdminStories';
@@ -56,11 +55,7 @@ const AdminDashboard = () => {
                 Access your Strapi dashboard to create and manage stories, upload media, and configure content.
               </p>
               <Button
-<<<<<<< HEAD
                 onClick={openStrapiDashboard}
-=======
-                onClick={() => window.open(`${STRAPI_URL}/admin`, '_blank')}
->>>>>>> main
                 className="flex items-center gap-2"
               >
                 <ExternalLink size={16} />
