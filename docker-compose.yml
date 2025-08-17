@@ -22,7 +22,8 @@ services:
       - ./apps/backend:/app
     depends_on:
       - postgres
-    command: npm run develop
+    entrypoint: ["npm", "run"]
+    command: develop
 
   web:
     build: ./apps/frontend
