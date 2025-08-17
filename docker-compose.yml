@@ -12,6 +12,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U strapi -d strapi"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   api:
     build: ./apps/backend
@@ -21,7 +26,8 @@ services:
     volumes:
       - ./apps/backend:/opt/app
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     entrypoint: ["npm", "run"]
     command: develop
 
