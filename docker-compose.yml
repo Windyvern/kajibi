@@ -26,7 +26,9 @@ services:
     command: develop
 
   web:
-    build: ./apps/frontend
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
     env_file: ./apps/frontend/.env.local
     ports:
       - "3000:3000"
