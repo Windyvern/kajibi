@@ -22,12 +22,17 @@ export const useStories = () => {
     queryFn: async (): Promise<Story[]> => {
       const response = await strapiFetch<any>(
         '/api/articles',
-        'populate=author,cover,blocks,blocks.file,blocks.files'
+        // Strapi v5: deep-populate dynamic zone and specific relations
+        'populate%5Bblocks%5D%5Bpopulate%5D=*' +
+          '&populate%5Bcover%5D=true' +
+          '&populate%5Bauthor%5D=true' +
+          '&populate%5Bcategory%5D=true'
       );
       const articles = response.data;
 
       return articles.map((article: any) => {
-        const attrs = article.attributes;
+        // Support Strapi v4 (attributes wrapper) and v5 (flat attributes)
+        const attrs = article.attributes ?? article;
         const panels: StoryPanelData[] = [];
 
         (attrs.blocks || []).forEach((block: any, index: number) => {
@@ -75,14 +80,15 @@ export const useStories = () => {
         return {
           id: article.id.toString(),
           title: attrs.title,
-          author: attrs.author?.data?.attributes?.name || '',
+          author: attrs.author?.data?.attributes?.name || attrs.author?.name || '',
           subtitle: undefined,
           handle: attrs.slug,
           publishedAt: attrs.publishedAt || attrs.createdAt,
           panels,
-          thumbnail: attrs.cover?.data?.attributes?.url
+          thumbnail: (attrs.cover?.data?.attributes?.url
             ? `${STRAPI_URL}${attrs.cover.data.attributes.url}`
-            : imagePanel?.media,
+            : (attrs.cover?.url ? `${STRAPI_URL}${attrs.cover.url}` : undefined))
+            ?? imagePanel?.media,
           thumbnailPanelId: imagePanel?.id,
           tags: undefined,
           address: undefined,

@@ -35,11 +35,27 @@ services:
     build:
       context: ./apps/frontend
       dockerfile: Dockerfile
+      args:
+        # These are used at build time and baked into the JS bundle
+        VITE_API_BASE: http://localhost:4000
+        VITE_STRAPI_URL: http://localhost:1337
     env_file: ./apps/frontend/.env.local
     ports:
       - "3000:3000"
-    volumes:
-      - ./apps/frontend:/app
+    # For static serve, avoid mounting source; it can overwrite the built dist
+    depends_on:
+      - api
+      - proxy
+
+  proxy:
+    build: ./apps/proxy
+    env_file: ./apps/backend/.env
+    environment:
+      # Points to Strapi service in the compose network
+      STRAPI_URL: http://api:1337
+      # STRAPI_API_TOKEN is loaded from env_file
+    ports:
+      - "4000:4000"
     depends_on:
       - api
 

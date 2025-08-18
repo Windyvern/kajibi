@@ -1,8 +1,9 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Map } from '@/components/Map';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { RestaurantCards } from '@/components/RestaurantCards';
+import { StoryMetadata } from '@/components/StoryMetadata';
 import { useStories } from '@/hooks/useStories';
 import { Story } from '@/types/story';
 import { X, List, Loader2 } from 'lucide-react';
@@ -12,6 +13,14 @@ const MapView = () => {
   const { data: stories, isLoading, error } = useStories();
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [showMobileList, setShowMobileList] = useState(false);
+  const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>({ center: { lat: 39.8283, lng: -98.5795 }, zoom: 4 });
+  // Track viewport to trigger re-render on resize and switch layouts live
+  const [viewport, setViewport] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const handleStorySelect = (story: Story) => {
     setSelectedStory(story);
@@ -119,62 +128,120 @@ const MapView = () => {
                 stories={stories}
                 onStorySelect={handleStorySelect}
                 selectedStoryId={selectedStory?.id}
+                center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
+                zoom={mapView.zoom}
+                onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
               />
             )}
           </div>
         )}
       </div>
 
-      {/* Desktop Layout - Responsive based on window ratio */}
-      <div className="hidden md:flex h-screen">
-        {/* Check window aspect ratio for responsive behavior */}
-        {((window.innerWidth / window.innerHeight) < 0.75) ? (
-          /* Mobile-like view for very narrow windows */
+      {/* Desktop Layout - Aspect-driven */}
+      <div className="hidden md:flex h-screen w-full">
+        {(viewport.w / viewport.h >= 1.4) ? (
+          // Wide screens: viewer (fixed 9:16) centered; left map grows; right description fixed; right blank space fills remainder
           selectedStory ? (
-            <TwoPanelStoryViewer 
-              initialStoryId={selectedStory.id}
-              stories={stories}
-              onClose={handleCloseStory}
-              rightPanelContent={<RestaurantCards />}
-            />
-          ) : (
-            <Map
-              stories={stories}
-              onStorySelect={handleStorySelect}
-              selectedStoryId={selectedStory?.id}
-            />
-          )
-        ) : selectedStory ? (
-          <>
-            {/* Show map only if window ratio allows */}
-            {(window.innerWidth / window.innerHeight) >= (4/3) && (
-              <div className="flex-shrink-0" style={{ width: 'calc(100vw - 56.25vh - 32rem)' }}>
+            <div className="flex w-full h-full items-stretch bg-white">
+              {/* Left Map grows to fill remaining width */}
+              <div className="flex-1 min-w-0">
                 <Map
                   stories={stories}
                   onStorySelect={handleStorySelect}
-                  selectedStoryId={selectedStory.id}
+                  selectedStoryId={selectedStory?.id}
+                  center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
+                  zoom={mapView.zoom}
+                  onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
                 />
               </div>
-            )}
-            
-            {/* Story Viewer + Panels */}
-            <div className="flex-1">
-              <TwoPanelStoryViewer 
-                initialStoryId={selectedStory.id}
+
+              {/* Center viewer: fixed 9:16 */}
+              <div className="flex items-center justify-center" style={{ width: '56.25vh', height: '100vh' }}>
+                <TwoPanelStoryViewer
+                  initialStoryId={selectedStory.id}
+                  stories={stories}
+                  onClose={handleCloseStory}
+                  hideMetadataPanel
+                  hideRightPanel
+                />
+              </div>
+
+              {/* Right description: fixed width matching viewer */}
+              <div className="flex-shrink-0 bg-white" style={{ width: '56.25vh' }}>
+                <div className="h-full">
+                  <StoryMetadata
+                    story={selectedStory}
+                    currentPanel={selectedStory.panels[0]}
+                  />
+                </div>
+              </div>
+
+              {/* Right blank space matches description background */}
+              <div className="flex-1 bg-white" />
+            </div>
+          ) : (
+            <div className="w-full h-full">
+              <Map
                 stories={stories}
-                onClose={handleCloseStory}
-                rightPanelContent={<RestaurantCards />}
+                onStorySelect={handleStorySelect}
+                selectedStoryId={undefined}
+                center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
+                zoom={mapView.zoom}
+                onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
               />
             </div>
-          </>
+          )
         ) : (
-          <div className="w-full">
-            <Map
-              stories={stories}
-              onStorySelect={handleStorySelect}
-              selectedStoryId={selectedStory?.id}
-            />
-          </div>
+          // Near-square: right viewer fixed 9:16; left column fills remaining width and is split into map (top) + description (bottom)
+          selectedStory ? (
+            <div className="grid w-full h-full" style={{ gridTemplateColumns: '1fr 56.25vh' }}>
+              {/* Left column fills remaining width */}
+              <div className="flex flex-col h-full min-w-0">
+                <div className="flex-1 min-h-0">
+                  <Map
+                    stories={stories}
+                    onStorySelect={handleStorySelect}
+                    selectedStoryId={selectedStory?.id}
+                    center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
+                    zoom={mapView.zoom}
+                    onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                  />
+                </div>
+                <div className="flex-1 min-h-0 bg-white overflow-hidden">
+                  <div className="h-full">
+                    <StoryMetadata
+                      story={selectedStory}
+                      currentPanel={selectedStory.panels[0]}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Right viewer fixed 9:16, no extra black bars */}
+              <div className="flex items-center justify-center" style={{ height: '100vh' }}>
+                <div style={{ width: '56.25vh', height: '100vh' }}>
+                  <TwoPanelStoryViewer
+                    initialStoryId={selectedStory.id}
+                    stories={stories}
+                    onClose={handleCloseStory}
+                    hideMetadataPanel
+                    hideRightPanel
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full h-full">
+              <Map
+                stories={stories}
+                onStorySelect={handleStorySelect}
+                selectedStoryId={undefined}
+                center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
+                zoom={mapView.zoom}
+                onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+              />
+            </div>
+          )
         )}
       </div>
     </div>

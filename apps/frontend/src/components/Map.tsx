@@ -19,9 +19,12 @@ interface MapProps {
   stories: Story[];
   onStorySelect: (story: Story) => void;
   selectedStoryId?: string;
+  center?: { lat: number; lng: number };
+  zoom?: number;
+  onViewChange?: (center: { lat: number; lng: number }, zoom: number) => void;
 }
 
-export const Map = ({ stories, onStorySelect, selectedStoryId }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -30,7 +33,9 @@ export const Map = ({ stories, onStorySelect, selectedStoryId }: MapProps) => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
     // Initialize map
-    mapInstanceRef.current = L.map(mapRef.current).setView([39.8283, -98.5795], 4);
+    const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
+    const initZoom: number = typeof zoom === 'number' ? zoom : 4;
+    mapInstanceRef.current = L.map(mapRef.current).setView(initCenter, initZoom);
 
     // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -67,6 +72,16 @@ export const Map = ({ stories, onStorySelect, selectedStoryId }: MapProps) => {
     });
 
     mapInstanceRef.current.addLayer(markersRef.current);
+
+    // Emit view changes to parent (e.g., to persist center/zoom across remounts)
+    if (onViewChange) {
+      const emit = () => {
+        const c = mapInstanceRef.current!.getCenter();
+        const z = mapInstanceRef.current!.getZoom();
+        onViewChange({ lat: c.lat, lng: c.lng }, z);
+      };
+      mapInstanceRef.current.on('moveend', emit);
+    }
 
     // Add custom CSS styles to document head
     const styleEl = document.createElement('style');
@@ -240,6 +255,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId }: MapProps) => {
       (marker as any).thumbnailUrl = thumbnailUrl;
       
       marker.on('click', () => {
+        // Center and zoom to street level before opening the story
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.setView([story.geo!.lat, story.geo!.lng], 16, { animate: true });
+          if (onViewChange) {
+            onViewChange({ lat: story.geo!.lat, lng: story.geo!.lng }, 16);
+          }
+        }
         onStorySelect(story);
       });
 
@@ -247,13 +269,33 @@ export const Map = ({ stories, onStorySelect, selectedStoryId }: MapProps) => {
     });
   }, [stories, onStorySelect, selectedStoryId]);
 
-  // Force map to resize and re-center when container size changes
+  // Force map to resize when its container changes size (layout switches, panel open/close)
   useEffect(() => {
-    if (mapInstanceRef.current) {
-      setTimeout(() => {
-        mapInstanceRef.current?.invalidateSize();
-      }, 300); // Wait for transition to complete
+    const map = mapInstanceRef.current;
+    const el = mapRef.current;
+    if (!map || !el) return;
+
+    // Initial invalidate after mount/layout
+    setTimeout(() => map.invalidateSize(), 0);
+
+    // Observe container size changes
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        map.invalidateSize();
+      });
+      ro.observe(el);
     }
+
+    const onWinResize = () => map.invalidateSize();
+    window.addEventListener('resize', onWinResize);
+
+    return () => {
+      window.removeEventListener('resize', onWinResize);
+      if (ro) {
+        try { ro.unobserve(el); } catch {}
+      }
+    };
   }, []);
 
   return (
