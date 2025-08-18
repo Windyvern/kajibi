@@ -4,7 +4,7 @@
   "info": {"singularName": "media-metadata", "pluralName": "media-metadatas", "displayName": "Media Metadata"},
   "options": {"draftAndPublish": true},
   "attributes": {
-    "file": {"type": "relation", "relation": "oneToOne", "target": "plugin::upload.file", "inversedBy": "metadata"},
+    "file": {"type": "relation", "relation": "oneToOne", "target": "plugin::upload.file"},
     "title": {"type": "string"},
     "author": {"type": "string"},
     "keywords": {"type": "json"},
