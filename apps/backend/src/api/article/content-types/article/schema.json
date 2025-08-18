@@ -56,11 +56,13 @@
     },
     "latitude": {
       "type": "decimal",
-      "columnType": "decimal(9,6)"
+      "precision": 9,
+      "scale": 6
     },
     "longitude": {
       "type": "decimal",
-      "columnType": "decimal(9,6)"
+      "precision": 9,
+      "scale": 6
     },
     "username": {
       "type": "string",
@@ -68,18 +70,21 @@
     },
     "rating": {
       "type": "decimal",
-      "columnType": "decimal(3,2)"
+      "precision": 3,
+      "scale": 2
     },
     "address": {
       "type": "string"
     },
     "price_min": {
       "type": "decimal",
-      "columnType": "decimal(10,2)"
+      "precision": 10,
+      "scale": 2
     },
     "price_max": {
       "type": "decimal",
-      "columnType": "decimal(10,2)"
+      "precision": 10,
+      "scale": 2
     },
     "is_closed": {
       "type": "boolean",

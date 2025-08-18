@@ -1,19 +1,52 @@
 {
   "kind": "collectionType",
   "collectionName": "media_metadatas",
-  "info": {"singularName": "media-metadata", "pluralName": "media-metadatas", "displayName": "Media Metadata"},
-  "options": {"draftAndPublish": true},
+  "info": {
+    "singularName": "media-metadata",
+    "pluralName": "media-metadatas",
+    "displayName": "Media Metadata"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
   "attributes": {
-    "file": {"type": "relation", "relation": "oneToOne", "target": "plugin::upload.file"},
-    "title": {"type": "string"},
-    "author": {"type": "string"},
-    "keywords": {"type": "json"},
-    "mentions": {"type": "json"},
-    "rating": {"type": "decimal", "columnType": "decimal(3,2)"},
-    "vg": {"type": "boolean", "default": false},
-    "date_taken": {"type": "date"},
-    "date_posted": {"type": "date"},
-    "category": {"type": "string"},
-    "description": {"type": "text"}
+    "file": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "plugin::upload.file"
+    },
+    "title": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "keywords": {
+      "type": "json"
+    },
+    "mentions": {
+      "type": "json"
+    },
+    "rating": {
+      "type": "decimal",
+      "precision": 3,
+      "scale": 2
+    },
+    "vg": {
+      "type": "boolean",
+      "default": false
+    },
+    "date_taken": {
+      "type": "date"
+    },
+    "date_posted": {
+      "type": "date"
+    },
+    "category": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    }
   }
 }
