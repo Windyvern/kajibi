@@ -13,13 +13,17 @@ interface TwoPanelStoryViewerProps {
   stories: Story[];
   onClose?: () => void;
   rightPanelContent?: React.ReactNode;
+  hideMetadataPanel?: boolean;
+  hideRightPanel?: boolean;
 }
 
 export const TwoPanelStoryViewer = ({ 
   initialStoryId, 
   stories,
   onClose,
-  rightPanelContent
+  rightPanelContent,
+  hideMetadataPanel,
+  hideRightPanel,
 }: TwoPanelStoryViewerProps) => {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(() => {
     if (initialStoryId) {
@@ -36,7 +40,8 @@ export const TwoPanelStoryViewer = ({
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
 
   const currentStory = stories[currentStoryIndex];
-  const currentPanel = currentStory?.panels[currentPanelIndex];
+  const hasPanels = (currentStory?.panels?.length || 0) > 0;
+  const currentPanel = hasPanels ? currentStory?.panels[currentPanelIndex] : undefined;
 
   // Mock highlights data - in real app, this would come from the story data
   const mockHighlights = [
@@ -188,8 +193,8 @@ export const TwoPanelStoryViewer = ({
     return () => window.removeEventListener('resize', updateAspectRatio);
   }, []);
 
-  const shouldShowRightPanel = windowAspectRatio >= 16/9; // Show only if aspect ratio is 16:9 or wider
-  const shouldShowMetadataPanel = windowAspectRatio >= 4/3; // Show only if aspect ratio is 4:3 or wider
+  const shouldShowRightPanel = !hideRightPanel && windowAspectRatio >= 16/9; // Show only if aspect ratio is 16:9 or wider
+  const shouldShowMetadataPanel = !hideMetadataPanel && windowAspectRatio >= 4/3; // Show only if aspect ratio is 4:3 or wider
 
   const handlePanelClick = (event: React.MouseEvent) => {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
@@ -203,8 +208,24 @@ export const TwoPanelStoryViewer = ({
     }
   };
 
-  if (!currentStory || !currentPanel) {
+  if (!currentStory) {
     return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading...</div>;
+  }
+
+  if (!hasPanels) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white space-y-4">
+        <p>No content panels for this article yet.</p>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded bg-white/10 hover:bg-white/20"
+          >
+            Close
+          </button>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -235,12 +256,15 @@ export const TwoPanelStoryViewer = ({
             <Grid3X3 size={20} />
           </button>
 
-          {/* Story Panel */}
+          {/* Story Panel with fixed 9:16 ratio centered with side letterboxing on mobile */}
           <div 
-            className="w-full h-screen cursor-pointer"
+            className="w-full h-screen cursor-pointer bg-black flex items-center justify-center"
             onClick={handlePanelClick}
           >
-            <StoryPanel panel={currentPanel} />
+            {/* Width derived from height to keep 9:16: width = 56.25vh */}
+            <div style={{ width: '56.25vh', height: '100vh' }} className="flex items-center justify-center">
+              <StoryPanel panel={currentPanel} />
+            </div>
           </div>
 
           {/* Sliding Metadata Panel */}
@@ -286,20 +310,30 @@ export const TwoPanelStoryViewer = ({
         <div 
           className="flex justify-center items-center bg-black flex-shrink-0"
           style={{ 
-            width: `${Math.min(56.25, 100 * (9/16) / windowAspectRatio)}vh`,
+            // Fix width to 56.25vh (9:16 based on viewport height) regardless of window width
+            width: '56.25vh',
             height: '100vh'
           }}
         >
           <div 
-            className="relative bg-black w-full"
+            className="relative bg-black w-full h-full"
             style={{ 
-              aspectRatio: '9/16',
-              height: '100vh'
+              width: '100%',
+              height: '100%'
             }}
             {...desktopSwipeHandlers}
             onMouseEnter={() => setIsAutoPlaying(false)}
             onMouseLeave={() => setIsAutoPlaying(true)}
           >
+            {/* Desktop Close Button (if onClose provided) */}
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+              >
+                <X size={20} />
+              </button>
+            )}
             {/* Progress Bar */}
             <div className="absolute top-0 left-0 right-0 z-20 p-4">
               <ProgressBar

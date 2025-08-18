@@ -1,8 +1,9 @@
 import { useStories } from '@/hooks/useStories';
+import { Story } from '@/types/story';
 import { Star } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 
-export const LatestArticlesGallery = () => {
+export const LatestArticlesGallery = ({ onSelect }: { onSelect?: (story: Story) => void }) => {
   const { data: stories, isLoading, error } = useStories();
 
   if (isLoading) {
@@ -80,6 +81,7 @@ export const LatestArticlesGallery = () => {
             <div
               key={story.id}
               className="relative group cursor-pointer transition-transform hover:scale-105 duration-200"
+              onClick={() => onSelect && onSelect(story)}
             >
               <div className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg">
                 {/* Thumbnail Image */}
