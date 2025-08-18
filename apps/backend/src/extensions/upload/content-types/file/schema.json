@@ -1,0 +1,41 @@
+{
+  "collectionName": "files",
+  "info": {
+    "singularName": "file",
+    "pluralName": "files"
+  },
+  "attributes": {
+    "title": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "keywords": {
+      "type": "json"
+    },
+    "mentions": {
+      "type": "json"
+    },
+    "rating": {
+      "type": "decimal",
+      "columnType": "decimal(3,2)"
+    },
+    "vg": {
+      "type": "boolean",
+      "default": false
+    },
+    "date_taken": {
+      "type": "date"
+    },
+    "date_posted": {
+      "type": "date"
+    },
+    "category": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    }
+  }
+}

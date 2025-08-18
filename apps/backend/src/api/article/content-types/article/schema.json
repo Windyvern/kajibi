@@ -61,6 +61,53 @@
     "longitude": {
       "type": "decimal",
       "columnType": "decimal(9,6)"
+    },
+    "username": {
+      "type": "string",
+      "regex": "^@[A-Za-z0-9_.]+$"
+    },
+    "rating": {
+      "type": "decimal",
+      "columnType": "decimal(3,2)"
+    },
+    "address": {
+      "type": "string"
+    },
+    "price_min": {
+      "type": "decimal",
+      "columnType": "decimal(10,2)"
+    },
+    "price_max": {
+      "type": "decimal",
+      "columnType": "decimal(10,2)"
+    },
+    "is_closed": {
+      "type": "boolean",
+      "default": false
+    },
+    "types": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::type.type",
+      "inversedBy": "articles"
+    },
+    "prizes": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::prize.prize",
+      "inversedBy": "articles"
+    },
+    "lists": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::list.list",
+      "inversedBy": "articles"
+    },
+    "tags": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::tag.tag",
+      "inversedBy": "articles"
     }
   }
 }
