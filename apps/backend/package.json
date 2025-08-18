@@ -24,8 +24,7 @@
     "react-dom": "^18.0.0",
     "react-router-dom": "^6.0.0",
     "strapi-prometheus": "^2.2.1",
-    "styled-components": "^6.0.0",
-    "@strapi/plugin-upload": "5.9.0"
+    "styled-components": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",
