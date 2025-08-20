@@ -48,19 +48,18 @@
     "blocks": {
       "type": "dynamiczone",
       "components": [
-        "shared.media",
         "shared.quote",
         "shared.rich-text",
         "shared.slider"
       ]
     },
     "latitude": {
-      "type": "decimal",
+      "type": "float",
       "precision": 9,
       "scale": 6
     },
     "longitude": {
-      "type": "decimal",
+      "type": "float",
       "precision": 9,
       "scale": 6
     },
@@ -113,6 +112,23 @@
       "relation": "manyToMany",
       "target": "api::tag.tag",
       "inversedBy": "articles"
+    },
+    "media": {
+      "type": "media",
+      "multiple": true,
+      "required": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "first_visit": {
+      "type": "date"
+    },
+    "last_visit": {
+      "type": "date"
     }
   }
 }

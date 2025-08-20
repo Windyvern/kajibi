@@ -7,18 +7,27 @@ function getMediaUrl(file: any): string | undefined {
   if (typeof file === 'string') {
     return `${STRAPI_URL}/uploads/${file}`;
   }
-  if (file.data?.attributes?.url) {
-    return `${STRAPI_URL}${file.data.attributes.url}`;
-  }
-  if (file.url) {
-    return `${STRAPI_URL}${file.url}`;
-  }
+  const entry = file?.data?.attributes ? file.data : file;
+  const url = entry?.attributes?.url || entry?.url;
+  if (url) return `${STRAPI_URL}${url}`;
   return undefined;
+}
+
+function isVideoFile(file: any, url?: string): boolean {
+  const mime = file?.data?.attributes?.mime || file?.mime;
+  if (typeof mime === 'string' && mime.toLowerCase().includes('video')) return true;
+  const u = url || file?.data?.attributes?.url || file?.url || '';
+  return /\.(mp4|mov|webm)$/i.test(u);
+}
+
+function getMime(file: any): string | undefined {
+  const entry = file?.data?.attributes ? file.data : file;
+  return entry?.attributes?.mime || entry?.mime;
 }
 
 function mapArticleToStory(article: any): Story {
   const attrs = article.attributes;
-  const panels: StoryPanelData[] = [];
+  let panels: StoryPanelData[] = [];
 
   (attrs.blocks || []).forEach((block: any, index: number) => {
     switch (block.__component) {
@@ -60,7 +69,26 @@ function mapArticleToStory(article: any): Story {
     }
   });
 
-  const imagePanel = panels.find(p => p.type === 'image');
+  // Also append media files to panels so the full gallery displays, even when blocks exist
+  if (attrs.media) {
+    const list = Array.isArray(attrs.media?.data) ? attrs.media.data : (Array.isArray(attrs.media) ? attrs.media : []);
+    const baseIndex = panels.length;
+    const extra = (list || []).map((file: any, i: number) => {
+      const url = getMediaUrl(file);
+      return {
+        id: `${article.id}-media-${baseIndex + i}`,
+        type: isVideoFile(file, url) ? 'video' as const : 'image' as const,
+        media: url,
+        orderIndex: baseIndex + i,
+      };
+    }).filter(p => !!p.media);
+    panels = [...panels, ...extra];
+  }
+
+  const coverUrl = getMediaUrl(attrs.cover);
+  const coverMime = (getMime(attrs.cover) || '').toLowerCase();
+  const thumbFromCover = coverUrl && !coverMime.includes('video') ? coverUrl : undefined;
+  const imagePanel = panels.find(p => p.type === 'image' || p.type === 'video');
 
   return {
     id: article.id.toString(),
@@ -70,9 +98,7 @@ function mapArticleToStory(article: any): Story {
     handle: attrs.slug,
     publishedAt: attrs.publishedAt || attrs.createdAt,
     panels,
-    thumbnail: attrs.cover?.data?.attributes?.url
-      ? `${STRAPI_URL}${attrs.cover.data.attributes.url}`
-      : imagePanel?.media,
+    thumbnail: thumbFromCover ?? imagePanel?.media,
     thumbnailPanelId: imagePanel?.id,
     tags: undefined,
     address: undefined,
@@ -90,7 +116,7 @@ export const useStory = (storyId: string) => {
     queryFn: async (): Promise<Story | null> => {
       const response = await strapiFetch<any>(
         `/api/articles/${storyId}`,
-        'populate=author,cover,blocks,blocks.file,blocks.files'
+        'populate=author,cover,media,blocks,blocks.file,blocks.files'
       );
       if (!response.data) return null;
       return mapArticleToStory(response.data);

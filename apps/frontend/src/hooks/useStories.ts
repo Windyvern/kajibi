@@ -7,13 +7,23 @@ function getMediaUrl(file: any): string | undefined {
   if (typeof file === 'string') {
     return `${STRAPI_URL}/uploads/${file}`;
   }
-  if (file.data?.attributes?.url) {
-    return `${STRAPI_URL}${file.data.attributes.url}`;
-  }
-  if (file.url) {
-    return `${STRAPI_URL}${file.url}`;
-  }
+  // Support shapes: { data: { attributes: { url } } } or { attributes: { url } } or { url }
+  const entry = file?.data?.attributes ? file.data : file;
+  const url = entry?.attributes?.url || entry?.url;
+  if (url) return `${STRAPI_URL}${url}`;
   return undefined;
+}
+
+function isVideoFile(file: any, url?: string): boolean {
+  const mime = file?.data?.attributes?.mime || file?.mime;
+  if (typeof mime === 'string' && mime.toLowerCase().includes('video')) return true;
+  const u = url || file?.data?.attributes?.url || file?.url || '';
+  return /\.(mp4|mov|webm)$/i.test(u);
+}
+
+function getMime(file: any): string | undefined {
+  const entry = file?.data?.attributes ? file.data : file;
+  return entry?.attributes?.mime || entry?.mime;
 }
 
 export const useStories = () => {
@@ -26,14 +36,16 @@ export const useStories = () => {
         'populate%5Bblocks%5D%5Bpopulate%5D=*' +
           '&populate%5Bcover%5D=true' +
           '&populate%5Bauthor%5D=true' +
-          '&populate%5Bcategory%5D=true'
+          '&populate%5Bcategory%5D=true' +
+          '&populate%5Bmedia%5D=true' +
+          '&pagination%5BpageSize%5D=1000'
       );
       const articles = response.data;
 
       return articles.map((article: any) => {
         // Support Strapi v4 (attributes wrapper) and v5 (flat attributes)
         const attrs = article.attributes ?? article;
-        const panels: StoryPanelData[] = [];
+        let panels: StoryPanelData[] = [];
 
         (attrs.blocks || []).forEach((block: any, index: number) => {
           switch (block.__component) {
@@ -75,6 +87,25 @@ export const useStories = () => {
           }
         });
 
+        // Also append media files to panels so the full gallery displays, even when blocks exist
+        if (attrs.media) {
+          const list = Array.isArray(attrs.media?.data) ? attrs.media.data : (Array.isArray(attrs.media) ? attrs.media : []);
+          const baseIndex = panels.length;
+          const extra = (list || []).map((file: any, i: number) => {
+            const url = getMediaUrl(file);
+            return {
+              id: `${article.id}-media-${baseIndex + i}`,
+              type: isVideoFile(file, url) ? 'video' as const : 'image' as const,
+              media: url,
+              orderIndex: baseIndex + i,
+            };
+          }).filter(p => !!p.media);
+          panels = [...panels, ...extra];
+        }
+
+        const coverUrl = getMediaUrl(attrs.cover);
+        const coverMime = (getMime(attrs.cover) || '').toLowerCase();
+        const thumbFromCover = coverUrl && !coverMime.includes('video') ? coverUrl : undefined;
         const imagePanel = panels.find(p => p.type === 'image');
 
         return {
@@ -85,10 +116,7 @@ export const useStories = () => {
           handle: attrs.slug,
           publishedAt: attrs.publishedAt || attrs.createdAt,
           panels,
-          thumbnail: (attrs.cover?.data?.attributes?.url
-            ? `${STRAPI_URL}${attrs.cover.data.attributes.url}`
-            : (attrs.cover?.url ? `${STRAPI_URL}${attrs.cover.url}` : undefined))
-            ?? imagePanel?.media,
+          thumbnail: thumbFromCover ?? imagePanel?.media,
           thumbnailPanelId: imagePanel?.id,
           tags: undefined,
           address: undefined,

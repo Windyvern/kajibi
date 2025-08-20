@@ -7,12 +7,9 @@ function getMediaUrl(file: any): string | undefined {
   if (typeof file === 'string') {
     return `${STRAPI_URL}/uploads/${file}`;
   }
-  if (file.data?.attributes?.url) {
-    return `${STRAPI_URL}${file.data.attributes.url}`;
-  }
-  if (file.url) {
-    return `${STRAPI_URL}${file.url}`;
-  }
+  const entry = file?.data?.attributes ? file.data : file;
+  const url = entry?.attributes?.url || entry?.url;
+  if (url) return `${STRAPI_URL}${url}`;
   return undefined;
 }
 

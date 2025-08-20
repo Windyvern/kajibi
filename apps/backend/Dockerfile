@@ -23,7 +23,8 @@ ARG FRONTEND_URL
 ENV FRONTEND_URL=${FRONTEND_URL}
 ENV PATH=/opt/node_modules/.bin:$PATH
 
-RUN apk add --no-cache vips-dev
+RUN apk add --no-cache vips-dev ffmpeg unzip \
+ && (apk add --no-cache exiftool || apk add --no-cache perl-image-exiftool || true)
 WORKDIR /opt/
 COPY --from=build /opt/node_modules ./node_modules
 WORKDIR /opt/app

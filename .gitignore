@@ -35,3 +35,6 @@ Thumbs.db
 # Docker/dev
 *.localdev
 docker-data/
+
+# Local samples for Codex debugging
+ForCodex/
