@@ -43,6 +43,17 @@ export const TwoPanelStoryViewer = ({
   const hasPanels = (currentStory?.panels?.length || 0) > 0;
   const currentPanel = hasPanels ? currentStory?.panels[currentPanelIndex] : undefined;
 
+  // Simple prefetch of next image to reduce visible loading/cancellations
+  useEffect(() => {
+    if (!hasPanels) return;
+    const nextIndex = currentPanelIndex + 1;
+    const next = currentStory?.panels[nextIndex];
+    if (next && next.type === 'image' && next.media) {
+      const img = new Image();
+      img.src = next.media;
+    }
+  }, [currentPanelIndex, currentStory, hasPanels]);
+
   // Mock highlights data - in real app, this would come from the story data
   const mockHighlights = [
     {

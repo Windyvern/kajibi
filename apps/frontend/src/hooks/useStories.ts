@@ -37,6 +37,7 @@ export const useStories = () => {
           '&populate%5Bcover%5D=true' +
           '&populate%5Bauthor%5D=true' +
           '&populate%5Bcategory%5D=true' +
+          // Populate media relation (Strapi returns all items for multi-media relations)
           '&populate%5Bmedia%5D=true' +
           '&pagination%5BpageSize%5D=1000'
       );
@@ -89,24 +90,34 @@ export const useStories = () => {
 
         // Also append media files to panels so the full gallery displays, even when blocks exist
         if (attrs.media) {
-          const list = Array.isArray(attrs.media?.data) ? attrs.media.data : (Array.isArray(attrs.media) ? attrs.media : []);
+          const list = Array.isArray(attrs.media?.data)
+            ? attrs.media.data
+            : Array.isArray(attrs.media)
+              ? attrs.media
+              : [];
           const baseIndex = panels.length;
-          const extra = (list || []).map((file: any, i: number) => {
-            const url = getMediaUrl(file);
-            return {
-              id: `${article.id}-media-${baseIndex + i}`,
-              type: isVideoFile(file, url) ? 'video' as const : 'image' as const,
-              media: url,
-              orderIndex: baseIndex + i,
-            };
-          }).filter(p => !!p.media);
+          const extra = (list || [])
+            .map((file: any, i: number) => {
+              const url = getMediaUrl(file);
+              const type = isVideoFile(file, url) ? ('video' as const) : ('image' as const);
+              return url
+                ? {
+                    id: `${article.id}-media-${baseIndex + i}`,
+                    type,
+                    media: url,
+                    orderIndex: baseIndex + i,
+                  }
+                : undefined;
+            })
+            .filter(Boolean) as StoryPanelData[];
           panels = [...panels, ...extra];
         }
 
         const coverUrl = getMediaUrl(attrs.cover);
         const coverMime = (getMime(attrs.cover) || '').toLowerCase();
         const thumbFromCover = coverUrl && !coverMime.includes('video') ? coverUrl : undefined;
-        const imagePanel = panels.find(p => p.type === 'image');
+        // Prefer the first visual panel (image or video) for fallbacks
+        const imagePanel = panels.find(p => p.type === 'image' || p.type === 'video');
 
         return {
           id: article.id.toString(),
@@ -116,6 +127,7 @@ export const useStories = () => {
           handle: attrs.slug,
           publishedAt: attrs.publishedAt || attrs.createdAt,
           panels,
+          // Prefer image cover; otherwise fall back to first visual panel
           thumbnail: thumbFromCover ?? imagePanel?.media,
           thumbnailPanelId: imagePanel?.id,
           tags: undefined,

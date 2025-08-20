@@ -112,7 +112,7 @@ const pickField = (item: IgItem, keys: string[]): any => {
   return undefined;
 };
 
-const processCategory = async (strapi: any, cat: any, usernameFromZip: string) => {
+const processCategory = async (strapi: any, cat: any, usernameFromZip: string, touchedArticleIds: Set<number>) => {
   const looksMojibake = (s: string) => /[ÂÃ]|â[€€™“”]/.test(s);
   const fixMojibake = (s: string) => {
     try {
@@ -256,6 +256,7 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string) =
                 publishedAt: new Date().toISOString(),
               },
             });
+            if (article?.id) touchedArticleIds.add(article.id);
           } catch (e) {
             // Retry without description if it violates constraints
             article = await strapi.entityService.create('api::article.article', {
@@ -267,6 +268,7 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string) =
                 publishedAt: new Date().toISOString(),
               },
             });
+            if (article?.id) touchedArticleIds.add(article.id);
           }
         }
         // Ensure article is published
@@ -276,9 +278,15 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string) =
           }
         } catch {}
         // Try to connect uploaded file to an optional 'media' field if it exists; ignore if it doesn't
-        try { await strapi.entityService.update('api::article.article', article.id, { data: { media: { connect: [createdFile.id] } } }); } catch {}
+        try {
+          await strapi.entityService.update('api::article.article', article.id, { data: { media: { connect: [createdFile.id] } } });
+          if (article?.id) touchedArticleIds.add(article.id);
+        } catch {}
         // Ensure cover is set if not already
-        try { await strapi.entityService.update('api::article.article', article.id, { data: { cover: createdFile?.id ? { connect: [createdFile.id] } : undefined } }); } catch {}
+        try {
+          await strapi.entityService.update('api::article.article', article.id, { data: { cover: createdFile?.id ? { connect: [createdFile.id] } : undefined } });
+          if (article?.id && createdFile?.id) touchedArticleIds.add(article.id);
+        } catch {}
         // Update visit dates: preserve first_visit, refresh last_visit
         try {
           const current = await strapi.entityService.findOne('api::article.article', article.id, { fields: ['first_visit','last_visit'] });
@@ -336,13 +344,62 @@ export default {
 
     const contentDir = path.join(tmpBase, 'your_instagram_activity', 'content');
     const categoriesBase = ['posts', 'stories', 'reels'];
+    const touched = new Set<number>();
     for (const key of categoriesBase) {
       let jsonPath = await pickJsonPath(contentDir, key);
       if (!jsonPath) jsonPath = await findJsonAnywhere(tmpBase, key);
       if (!jsonPath) { try { ctx.strapi.log.info(`[ig-import] json not found for ${key}`); } catch {} continue; }
       try { ctx.strapi.log.info(`[ig-import] using json for ${key}: ${jsonPath}`); } catch {}
-      await processCategory(strapi, { key, json: jsonPath, folderName: key.charAt(0).toUpperCase() + key.slice(1) }, defaultUser);
+      await processCategory(strapi, { key, json: jsonPath, folderName: key.charAt(0).toUpperCase() + key.slice(1) }, defaultUser, touched);
     }
-    ctx.body = { ok: true };
+    // After import, refresh only articles that received new media/cover
+    try {
+      const ids = Array.from(touched);
+      if (ids.length) {
+        const hasDocumentsApi = typeof (strapi as any).documents === 'function';
+        const documentsApi = hasDocumentsApi ? (strapi as any).documents('api::article.article') : null;
+        let republished = 0;
+        let reassigned = 0;
+        let failed: Array<{ id: number; error: string }> = [];
+
+        for (const id of ids) {
+          try {
+            const art = await strapi.entityService.findOne('api::article.article', id, { populate: { media: true, cover: true } });
+            if (!art) continue;
+            const artAny: any = art as any;
+            if (documentsApi && artAny.documentId) {
+              try {
+                await documentsApi.publish({ documentId: artAny.documentId });
+                republished++;
+                continue;
+              } catch {
+                try {
+                  await documentsApi.unpublish({ documentId: artAny.documentId });
+                  await documentsApi.publish({ documentId: artAny.documentId });
+                  republished++;
+                  continue;
+                } catch {}
+              }
+            }
+            const mediaList = Array.isArray(artAny.media?.data)
+              ? artAny.media.data
+              : Array.isArray(artAny.media)
+                ? artAny.media
+                : [];
+            const mediaIds = mediaList.map((m: any) => (m?.id ?? m?.documentId ?? null)).filter(Boolean);
+            const coverId = artAny.cover?.id ?? artAny.cover?.data?.id ?? null;
+            await strapi.entityService.update('api::article.article', id, { data: { media: mediaIds, cover: coverId } });
+            reassigned++;
+          } catch (e: any) {
+            failed.push({ id, error: String(e?.message || e) });
+          }
+        }
+        ctx.body = { ok: true, refreshed: ids.length, republished, reassigned, failed };
+        return;
+      }
+    } catch (e) {
+      // Non-fatal; continue
+    }
+    ctx.body = { ok: true, refreshed: 0 };
   },
 };

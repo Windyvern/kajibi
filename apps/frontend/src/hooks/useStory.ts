@@ -71,17 +71,26 @@ function mapArticleToStory(article: any): Story {
 
   // Also append media files to panels so the full gallery displays, even when blocks exist
   if (attrs.media) {
-    const list = Array.isArray(attrs.media?.data) ? attrs.media.data : (Array.isArray(attrs.media) ? attrs.media : []);
+    const list = Array.isArray(attrs.media?.data)
+      ? attrs.media.data
+      : Array.isArray(attrs.media)
+        ? attrs.media
+        : [];
     const baseIndex = panels.length;
-    const extra = (list || []).map((file: any, i: number) => {
-      const url = getMediaUrl(file);
-      return {
-        id: `${article.id}-media-${baseIndex + i}`,
-        type: isVideoFile(file, url) ? 'video' as const : 'image' as const,
-        media: url,
-        orderIndex: baseIndex + i,
-      };
-    }).filter(p => !!p.media);
+    const extra = (list || [])
+      .map((file: any, i: number) => {
+        const url = getMediaUrl(file);
+        const type = isVideoFile(file, url) ? ('video' as const) : ('image' as const);
+        return url
+          ? {
+              id: `${article.id}-media-${baseIndex + i}`,
+              type,
+              media: url,
+              orderIndex: baseIndex + i,
+            }
+          : undefined;
+      })
+      .filter(Boolean) as StoryPanelData[];
     panels = [...panels, ...extra];
   }
 
@@ -98,6 +107,7 @@ function mapArticleToStory(article: any): Story {
     handle: attrs.slug,
     publishedAt: attrs.publishedAt || attrs.createdAt,
     panels,
+    // Prefer image cover; otherwise fall back to first visual panel
     thumbnail: thumbFromCover ?? imagePanel?.media,
     thumbnailPanelId: imagePanel?.id,
     tags: undefined,
@@ -116,7 +126,8 @@ export const useStory = (storyId: string) => {
     queryFn: async (): Promise<Story | null> => {
       const response = await strapiFetch<any>(
         `/api/articles/${storyId}`,
-        'populate=author,cover,media,blocks,blocks.file,blocks.files'
+        // Populate author, cover, media, and blocks
+        'populate%5Bauthor%5D=true&populate%5Bcover%5D=true&populate%5Bmedia%5D=true&populate%5Bblocks%5D%5Bpopulate%5D=*'
       );
       if (!response.data) return null;
       return mapArticleToStory(response.data);

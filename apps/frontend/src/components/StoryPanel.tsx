@@ -95,6 +95,7 @@ export const StoryPanel = ({ panel }: StoryPanelProps) => {
                 ref={videoRef}
                 autoPlay
                 muted={muted}
+                preload="auto"
                 loop
                 playsInline
               />

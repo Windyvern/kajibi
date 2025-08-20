@@ -19,13 +19,14 @@ export const useAdminStories = () => {
     queryFn: async (): Promise<Story[]> => {
       const response = await strapiFetch<any>(
         '/api/articles',
-        'populate=author,cover,blocks,blocks.file,blocks.files'
+        // Populate cover and media for admin list too, so thumbnails and galleries reflect DB
+        'populate=author,cover,media,blocks,blocks.file,blocks.files'
       );
       const articles = response.data;
 
       return articles.map((article: any) => {
         const attrs = article.attributes;
-        const panels: StoryPanelData[] = [];
+        let panels: StoryPanelData[] = [];
 
         (attrs.blocks || []).forEach((block: any, index: number) => {
           switch (block.__component) {
@@ -67,6 +68,30 @@ export const useAdminStories = () => {
           }
         });
 
+        // Append media relation files so admin sees full gallery, even without blocks
+        if ((attrs as any).media) {
+          const list = Array.isArray((attrs as any).media?.data)
+            ? (attrs as any).media.data
+            : Array.isArray((attrs as any).media)
+              ? (attrs as any).media
+              : [];
+          const baseIndex = panels.length;
+          const extra = (list || [])
+            .map((file: any, i: number) => {
+              const url = getMediaUrl(file);
+              return url
+                ? {
+                    id: `${article.id}-media-${baseIndex + i}`,
+                    type: 'image' as const,
+                    media: url,
+                    orderIndex: baseIndex + i,
+                  }
+                : undefined;
+            })
+            .filter(Boolean) as StoryPanelData[];
+          panels = [...panels, ...extra];
+        }
+
         const imagePanel = panels.find(p => p.type === 'image');
 
         return {
@@ -77,9 +102,10 @@ export const useAdminStories = () => {
           handle: attrs.slug,
           publishedAt: attrs.publishedAt || attrs.createdAt,
           panels,
-          thumbnail: attrs.cover?.data?.attributes?.url
+          // Prefer cover for thumbnails; fallback to first image
+          thumbnail: (attrs.cover?.data?.attributes?.url
             ? `${STRAPI_URL}${attrs.cover.data.attributes.url}`
-            : imagePanel?.media,
+            : undefined) ?? imagePanel?.media,
           thumbnailPanelId: imagePanel?.id,
           tags: undefined,
           address: undefined,
