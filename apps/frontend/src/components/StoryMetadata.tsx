@@ -1,9 +1,11 @@
 
 import { MapPin, Bookmark, Share2, Tag } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { Story, StoryPanelData } from "@/types/story";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { StoryHighlights } from "./StoryHighlights";
+// import { StoryHighlights } from "./StoryHighlights";
 
 interface StoryMetadataProps {
   story: Story;
@@ -12,79 +14,83 @@ interface StoryMetadataProps {
 }
 
 export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryMetadataProps) => {
+  const normalizeUsername = (u?: string) => {
+    if (!u) return '';
+    const trimmed = u.trim();
+    const noAt = trimmed.replace(/^@+/, '');
+    return '@' + noAt;
+  };
+  const usernameHandle = (u?: string) => {
+    if (!u) return '';
+    return u.trim().replace(/^@+/, '');
+  };
   const handleSave = () => {
     console.log("Save story:", story.id);
     // TODO: Implement save functionality
   };
 
+  const [showShare, setShowShare] = useState(false);
+  const shareRef = useRef<HTMLDivElement | null>(null);
+  const linkRef = useRef<HTMLInputElement | null>(null);
+  const shareUrl = (() => {
+    const base = window.location.origin;
+    const slug = encodeURIComponent(story.handle || story.id);
+    return `${base}/story/${slug}`;
+  })();
   const handleShare = () => {
-    console.log("Share story:", story.id);
-    // TODO: Implement share functionality
-    if (navigator.share) {
-      navigator.share({
-        title: story.title,
-        text: `Check out this story: ${story.title}`,
-        url: window.location.href,
-      });
-    }
+    setShowShare((s) => !s);
+    setTimeout(() => linkRef.current?.select(), 0);
   };
-
-  // Mock highlights data - in real app, this would come from the story data
-  const mockHighlights = [
-    {
-      id: '1',
-      title: 'Appetizers',
-      thumbnail: 'photo-1565299624946-b28f40a0ca4b',
-      panelIds: ['panel1', 'panel2']
-    },
-    {
-      id: '2',
-      title: 'Main Course',
-      thumbnail: 'photo-1567620905732-2d1ec7ab7445',
-      panelIds: ['panel3', 'panel4']
-    },
-    {
-      id: '3',
-      title: 'Desserts',
-      thumbnail: 'photo-1551024506-0bccd828d307',
-      panelIds: ['panel5', 'panel6']
-    },
-    {
-      id: '4',
-      title: 'Ambiance',
-      thumbnail: 'photo-1514933651103-005eec06c04b',
-      panelIds: ['panel7', 'panel8']
-    }
-  ];
-
-  const handleHighlightSelectInternal = (highlight: any) => {
-    console.log("Selected highlight:", highlight);
-    if (onHighlightSelect) {
-      onHighlightSelect(highlight);
-    }
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(shareUrl); } catch { linkRef.current?.select(); }
   };
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!showShare) return;
+      const t = e.target as Node;
+      if (shareRef.current && !shareRef.current.contains(t)) setShowShare(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [showShare]);
+
+  const lists = story.lists || [];
 
   return (
     <div className="h-full overflow-y-auto p-6 bg-white">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">{story.title}</h1>
-        <p className="text-lg text-gray-600 mb-1">@{story.author.toLowerCase().replace(' ', '.')}</p>
-        
-        {/* Location (mock data) */}
-        <div className="flex items-center text-gray-500 text-sm mb-4">
-          <MapPin size={14} className="mr-1" />
-          <span>Paris, France</span>
+        {story.username && (
+          <p className="text-lg text-gray-600 mb-1">
+            <a href={`https://instagram.com/${usernameHandle(story.username)}`}
+               target="_blank" rel="noopener noreferrer"
+               className="hover:underline">
+              {normalizeUsername(story.username)}
+            </a>
+          </p>
+        )}
+        {story.address && (
+          <div className="flex items-center text-gray-500 text-sm mb-4">
+            <MapPin size={14} className="mr-1" />
+            <span>{story.address}</span>
+          </div>
+        )}
+        <div className="text-sm text-gray-500 space-y-1">
+          {(() => {
+            const last = story.lastVisit || story.publishedAt;
+            const first = story.firstVisit;
+            const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+            const same = first && last && new Date(first).toDateString() === new Date(last).toDateString();
+            if (same) return <p>Visité le {fmt(last)}</p>;
+            return (
+              <>
+                <p>Dernière visite le {fmt(last)}</p>
+                {first && <p>Première visite le {fmt(first)}</p>}
+              </>
+            );
+          })()}
         </div>
-
-        {/* Published Date */}
-        <p className="text-sm text-gray-400">
-          Published {new Date(story.publishedAt).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          })}
-        </p>
       </div>
 
       {/* Tags */}
@@ -104,87 +110,73 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryM
         </div>
       )}
 
-      {/* Highlights Section */}
-      <StoryHighlights
-        highlights={mockHighlights}
-        onHighlightSelect={handleHighlightSelectInternal}
-      />
-
-      {/* Current Panel Info */}
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Current Panel</h3>
-        {currentPanel.title && (
-          <h4 className="font-semibold text-gray-900 mb-1">{currentPanel.title}</h4>
-        )}
-        {currentPanel.content && (
-          <p className="text-sm text-gray-600">{currentPanel.content}</p>
-        )}
-        <div className="mt-2 text-xs text-gray-400">
-          Type: {currentPanel.type} • Duration: {currentPanel.duration || 5}s
+      {/* Lists Section (round icons, clickable). Hidden if none. */}
+      {lists.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">Listes</h3>
+          <div className="flex gap-4 overflow-x-auto pb-1">
+            {lists.map((l) => {
+              const thumb = l.thumbnail || story.thumbnail;
+              const to = `/gallery?list=${encodeURIComponent(l.slug || l.id)}`;
+              return (
+                <Link key={l.id} to={to} className="group flex-shrink-0 text-center">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-sm">
+                    {thumb ? (
+                      <img src={thumb} alt={l.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200" />
+                    )}
+                  </div>
+                  <div className="mt-2 w-16">
+                    <p className="text-xs text-gray-700 leading-tight line-clamp-2">{l.name}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Current Panel Info - hidden for now */}
 
       {/* Description */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Description</h3>
         <div className="prose prose-sm text-gray-700">
-          <p>
-            Experience this captivating story through an immersive visual journey. 
-            Each panel has been carefully crafted to tell a compelling narrative that 
-            engages and inspires. Swipe through to discover the full story.
-          </p>
-          <p className="mt-3">
-            This story contains {story.panels.length} panels, each offering a unique 
-            perspective on the theme. Perfect for both quick browsing and deep 
-            engagement with the content.
-          </p>
+          {story.description ? (
+            <p>{story.description}</p>
+          ) : (
+            <p className="text-gray-500">Aucune description.</p>
+          )}
         </div>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-3 mb-6">
-        <Button 
-          onClick={handleSave} 
-          variant="outline" 
-          className="flex-1"
-        >
-          <Bookmark size={16} className="mr-2" />
+      <div className="flex gap-3 mb-6 relative">
+        {/* Save hidden for now */}
+        {/* <Button onClick={handleSave} variant="outline" className="flex-1">
+          <Bookmark size={16} className=\"mr-2\" />
           Save
-        </Button>
-        <Button 
-          onClick={handleShare} 
-          variant="outline" 
-          className="flex-1"
-        >
+        </Button> */}
+        <Button onClick={handleShare} variant="outline" className="flex-1">
           <Share2 size={16} className="mr-2" />
-          Share
+          Partager
         </Button>
+        {showShare && (
+          <div ref={shareRef} className="absolute left-0 right-0 top-full mt-2 bg-white border rounded-lg shadow-lg p-3 z-50">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium">Partager le lien</span>
+              <button onClick={() => setShowShare(false)} className="text-gray-500 hover:text-gray-700">×</button>
+            </div>
+            <div className="flex gap-2">
+              <input ref={linkRef} readOnly value={shareUrl} className="flex-1 border rounded px-2 py-1 text-sm" />
+              <Button size="sm" onClick={handleCopy}>Copier</Button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Story Stats */}
-      <div className="border-t pt-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Story Details</h3>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-gray-500">Panels:</span>
-            <span className="ml-1 font-medium">{story.panels.length}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Author:</span>
-            <span className="ml-1 font-medium">{story.author}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Type:</span>
-            <span className="ml-1 font-medium">Visual Story</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Duration:</span>
-            <span className="ml-1 font-medium">
-              ~{Math.ceil(story.panels.length * 5 / 60)} min
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* Details panel removed */}
     </div>
   );
 };

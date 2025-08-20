@@ -1,16 +1,20 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Map } from '@/components/Map';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { RestaurantCards } from '@/components/RestaurantCards';
 import { StoryMetadata } from '@/components/StoryMetadata';
 import { useStories } from '@/hooks/useStories';
 import { Story } from '@/types/story';
-import { X, List, Loader2 } from 'lucide-react';
+import { X, List, Loader2, Grid3X3 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
 const MapView = () => {
   const { data: stories, isLoading, error } = useStories();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [showMobileList, setShowMobileList] = useState(false);
   const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>({ center: { lat: 39.8283, lng: -98.5795 }, zoom: 4 });
@@ -25,11 +29,27 @@ const MapView = () => {
   const handleStorySelect = (story: Story) => {
     setSelectedStory(story);
     setShowMobileList(false);
+    // Update URL query param for deep link
+    const slug = encodeURIComponent(story.handle || story.id);
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('story', slug);
+    window.history.replaceState({}, '', newUrl.toString());
   };
 
   const handleCloseStory = () => {
     setSelectedStory(null);
   };
+
+  // Select story by ?story=slug on first load
+  useEffect(() => {
+    if (!stories) return;
+    const slug = params.get('story');
+    if (slug && !selectedStory) {
+      const found = stories.find((s) => (s.handle || '').toLowerCase() === slug.toLowerCase());
+      if (found) setSelectedStory(found);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stories]);
 
   if (isLoading) {
     return (
@@ -63,9 +83,23 @@ const MapView = () => {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Header buttons */}
+      <div className="fixed top-4 right-4 z-[10000] flex gap-2">
+        <Link to="/gallery">
+          <Button variant="default" className="bg-white text-gray-900 shadow-md">
+            <Grid3X3 size={16} className="mr-2" />
+            Galerie
+          </Button>
+        </Link>
+        <Link to="/lists">
+          <Button variant="default" className="bg-white text-gray-900 shadow-md">
+            <List size={16} className="mr-2" />
+            Listes
+          </Button>
+        </Link>
+      </div>
       {/* Mobile Layout */}
       <div className="md:hidden">
         {selectedStory ? (

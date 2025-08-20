@@ -102,17 +102,26 @@ function mapArticleToStory(article: any): Story {
   return {
     id: article.id.toString(),
     title: attrs.title,
-    author: attrs.author?.data?.attributes?.name || '',
+    author: attrs.author?.data?.attributes?.name || (attrs.username || ''),
     subtitle: undefined,
     handle: attrs.slug,
     publishedAt: attrs.publishedAt || attrs.createdAt,
+    firstVisit: attrs.first_visit || undefined,
+    lastVisit: attrs.last_visit || undefined,
     panels,
     // Prefer image cover; otherwise fall back to first visual panel
     thumbnail: thumbFromCover ?? imagePanel?.media,
     thumbnailPanelId: imagePanel?.id,
+    rating: attrs.rating != null ? Number(attrs.rating) : undefined,
+    username: attrs.username || undefined,
     tags: undefined,
-    address: undefined,
+    address: attrs.address || undefined,
     description: attrs.description,
+    lists: Array.isArray(attrs.lists)
+      ? attrs.lists.map((l: any) => ({ id: String(l.id || l.documentId || ''), name: l.name, slug: l.slug, thumbnail: getMediaUrl(l.cover) }))
+      : Array.isArray(attrs.lists?.data)
+        ? attrs.lists.data.map((e: any) => ({ id: String(e.id || e.documentId || ''), name: e.attributes?.name || e.name, slug: e.attributes?.slug || e.slug, thumbnail: getMediaUrl(e.attributes?.cover || e.cover) }))
+        : undefined,
     geo:
       attrs.latitude && attrs.longitude
         ? { lat: Number(attrs.latitude), lng: Number(attrs.longitude) }
@@ -126,8 +135,8 @@ export const useStory = (storyId: string) => {
     queryFn: async (): Promise<Story | null> => {
       const response = await strapiFetch<any>(
         `/api/articles/${storyId}`,
-        // Populate author, cover, media, and blocks
-        'populate%5Bauthor%5D=true&populate%5Bcover%5D=true&populate%5Bmedia%5D=true&populate%5Bblocks%5D%5Bpopulate%5D=*'
+        // Populate author, cover, media, lists (with cover), and blocks
+        'populate%5Bauthor%5D=true&populate%5Bcover%5D=true&populate%5Bmedia%5D=true&populate%5Blists%5D%5Bpopulate%5D=cover&populate%5Bblocks%5D%5Bpopulate%5D=*'
       );
       if (!response.data) return null;
       return mapArticleToStory(response.data);

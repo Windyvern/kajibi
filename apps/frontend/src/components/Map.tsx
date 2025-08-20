@@ -275,8 +275,9 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     const el = mapRef.current;
     if (!map || !el) return;
 
-    // Initial invalidate after mount/layout
+    // Initial invalidate after mount/layout (do a couple to be safe)
     setTimeout(() => map.invalidateSize(), 0);
+    setTimeout(() => map.invalidateSize(), 250);
 
     // Observe container size changes
     let ro: ResizeObserver | undefined;

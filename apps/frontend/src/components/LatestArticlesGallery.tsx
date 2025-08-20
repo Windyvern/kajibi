@@ -3,8 +3,9 @@ import { Story } from '@/types/story';
 import { Star } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 
-export const LatestArticlesGallery = ({ onSelect }: { onSelect?: (story: Story) => void }) => {
-  const { data: stories, isLoading, error } = useStories();
+export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onSelect?: (story: Story) => void, stories?: Story[] }) => {
+  const { data: fetchedStories, isLoading, error } = useStories();
+  const stories = inputStories ?? fetchedStories;
 
   if (isLoading) {
     return (
@@ -34,12 +35,6 @@ export const LatestArticlesGallery = ({ onSelect }: { onSelect?: (story: Story) 
       day: 'numeric',
       year: 'numeric'
     });
-  };
-
-  // Generate a random rating between 3.5 and 5 for demo purposes
-  const generateRating = (id: string) => {
-    const seed = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return 3.5 + (seed % 15) / 10; // Returns between 3.5 and 5.0
   };
 
   const renderStars = (rating: number) => {
@@ -76,7 +71,7 @@ export const LatestArticlesGallery = ({ onSelect }: { onSelect?: (story: Story) 
       <h2 className="text-2xl font-bold mb-6 text-foreground">Latest Articles</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {sortedStories.map((story) => {
-          const rating = generateRating(story.id);
+          const rating = story.rating;
           return (
             <div
               key={story.id}
@@ -102,19 +97,19 @@ export const LatestArticlesGallery = ({ onSelect }: { onSelect?: (story: Story) 
                   
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-gray-200">
-                      {formatDate(story.publishedAt)}
+                      {formatDate(story.lastVisit || story.publishedAt)}
                     </span>
-                    <div className="flex items-center gap-1">
-                      {renderStars(rating)}
-                      <span className="text-sm ml-1 text-gray-200">
-                        {rating.toFixed(1)}
-                      </span>
-                    </div>
+                    {typeof rating === 'number' && !Number.isNaN(rating) && (
+                      <div className="flex items-center gap-1">
+                        {renderStars(rating)}
+                        <span className="text-sm ml-1 text-gray-200">
+                          {rating.toFixed(1)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   
-                  <div className="text-xs text-gray-300">
-                    By {story.author}
-                  </div>
+                  {/* Author hidden for now; use formatAuthor(story.username) when needed */}
                 </div>
               </div>
             </div>

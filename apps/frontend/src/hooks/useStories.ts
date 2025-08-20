@@ -39,6 +39,8 @@ export const useStories = () => {
           '&populate%5Bcategory%5D=true' +
           // Populate media relation (Strapi returns all items for multi-media relations)
           '&populate%5Bmedia%5D=true' +
+          // Populate lists and their cover for thumbnails
+          '&populate%5Blists%5D%5Bpopulate%5D=cover' +
           '&pagination%5BpageSize%5D=1000'
       );
       const articles = response.data;
@@ -122,16 +124,35 @@ export const useStories = () => {
         return {
           id: article.id.toString(),
           title: attrs.title,
-          author: attrs.author?.data?.attributes?.name || attrs.author?.name || '',
+          author: attrs.author?.data?.attributes?.name || attrs.author?.name || (attrs.username || ''),
           subtitle: undefined,
           handle: attrs.slug,
           publishedAt: attrs.publishedAt || attrs.createdAt,
+          firstVisit: attrs.first_visit || undefined,
+          lastVisit: attrs.last_visit || undefined,
           panels,
           // Prefer image cover; otherwise fall back to first visual panel
           thumbnail: thumbFromCover ?? imagePanel?.media,
           thumbnailPanelId: imagePanel?.id,
+          rating: attrs.rating != null ? Number(attrs.rating) : undefined,
+          username: attrs.username || undefined,
+          lists: Array.isArray(attrs.lists)
+            ? attrs.lists.map((l: any) => ({
+                id: String(l.id || l.documentId || ''),
+                name: l.name,
+                slug: l.slug,
+                thumbnail: getMediaUrl(l.cover)
+              }))
+            : Array.isArray(attrs.lists?.data)
+              ? attrs.lists.data.map((e: any) => ({
+                  id: String(e.id || e.documentId || ''),
+                  name: e.attributes?.name || e.name,
+                  slug: e.attributes?.slug || e.slug,
+                  thumbnail: getMediaUrl(e.attributes?.cover || e.cover)
+                }))
+              : undefined,
           tags: undefined,
-          address: undefined,
+          address: attrs.address || undefined,
           description: attrs.description,
           geo:
             attrs.latitude && attrs.longitude
