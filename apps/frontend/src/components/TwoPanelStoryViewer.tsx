@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Grid3X3, X, ChevronDown, ChevronUp } from "lucide-react";
 import { StoryPanel } from "./StoryPanel";
 import { ProgressBar } from "./ProgressBar";
@@ -10,6 +10,7 @@ import { useSwipeGestures } from "@/hooks/useSwipeGestures";
 
 interface TwoPanelStoryViewerProps {
   initialStoryId?: string;
+  initialPanelId?: string;
   stories: Story[];
   onClose?: () => void;
   rightPanelContent?: React.ReactNode;
@@ -19,6 +20,7 @@ interface TwoPanelStoryViewerProps {
 
 export const TwoPanelStoryViewer = ({ 
   initialStoryId, 
+  initialPanelId,
   stories,
   onClose,
   rightPanelContent,
@@ -88,10 +90,30 @@ export const TwoPanelStoryViewer = ({
       const index = stories.findIndex(story => story.id === initialStoryId);
       if (index >= 0 && index !== currentStoryIndex) {
         setCurrentStoryIndex(index);
-        setCurrentPanelIndex(0);
+        const story = stories[index];
+        if (initialPanelId) {
+          const idx = story.panels.findIndex(p => p.id === initialPanelId);
+          setCurrentPanelIndex(idx >= 0 ? idx : 0);
+        } else {
+          setCurrentPanelIndex(0);
+        }
       }
     }
-  }, [initialStoryId, stories, currentStoryIndex]);
+  }, [initialStoryId, initialPanelId, stories, currentStoryIndex]);
+
+  // Ensure we jump to the requested panel only once per story selection
+  const appliedInitialForStoryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialPanelId) return;
+    const story = stories[currentStoryIndex];
+    if (!story) return;
+    if (appliedInitialForStoryRef.current === story.id) return;
+    const idx = story.panels.findIndex(p => p.id === initialPanelId || p.slug === initialPanelId);
+    if (idx >= 0) {
+      setCurrentPanelIndex(idx);
+      appliedInitialForStoryRef.current = story.id;
+    }
+  }, [initialPanelId, currentStoryIndex, stories]);
 
   const goToNextPanel = useCallback(() => {
     if (currentPanelIndex < currentStory.panels.length - 1) {
@@ -246,6 +268,10 @@ export const TwoPanelStoryViewer = ({
         <div 
           className="relative min-h-screen overflow-hidden"
           {...mobileSwipeHandlers}
+          onWheel={(e) => {
+            if (e.deltaY < -30 && !showMetadataPanel) setShowMetadataPanel(true);
+            if (e.deltaY > 30 && showMetadataPanel) setShowMetadataPanel(false);
+          }}
           onMouseEnter={() => setIsAutoPlaying(false)}
           onMouseLeave={() => setIsAutoPlaying(true)}
         >
@@ -256,6 +282,29 @@ export const TwoPanelStoryViewer = ({
               currentPanel={currentPanelIndex}
               storyTitle={currentStory.title}
               author={currentStory.author}
+              uploaderName={(() => {
+                const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
+                for (const f of fields) {
+                  const m = f.match(/@([A-Za-z0-9._]+)/);
+                  if (m) return `@${m[1]}`;
+                }
+                return undefined;
+              })()}
+              dateText={(() => {
+                const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
+                for (const f of fields) {
+                  const m = f.match(/(\d{4}[-\/]\d{2}[-\/]\d{2})/);
+                  if (m) {
+                    const s = m[1].replace(/\//g, '-');
+                    const d = new Date(s);
+                    if (!isNaN(d.getTime())) return d.toLocaleDateString();
+                  }
+                }
+                const fallback = currentStory?.publishedAt ? new Date(currentStory.publishedAt) : new Date();
+                return fallback.toLocaleDateString();
+              })()}
+              avatarUrl={undefined}
+              onClose={onClose}
             />
           </div>
 
@@ -283,7 +332,7 @@ export const TwoPanelStoryViewer = ({
             className={`absolute bottom-0 left-0 right-0 bg-white transition-transform duration-300 ease-out z-40 ${
               showMetadataPanel ? 'transform translate-y-0' : 'transform translate-y-full'
             }`}
-            style={{ height: '70vh' }}
+            style={{ height: '50vh' }}
           >
             <div className="p-4 h-full overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
@@ -336,15 +385,6 @@ export const TwoPanelStoryViewer = ({
             onMouseEnter={() => setIsAutoPlaying(false)}
             onMouseLeave={() => setIsAutoPlaying(true)}
           >
-            {/* Desktop Close Button (if onClose provided) */}
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
-              >
-                <X size={20} />
-              </button>
-            )}
             {/* Progress Bar */}
             <div className="absolute top-0 left-0 right-0 z-20 p-4">
               <ProgressBar
@@ -352,6 +392,29 @@ export const TwoPanelStoryViewer = ({
                 currentPanel={currentPanelIndex}
                 storyTitle={currentStory.title}
                 author={currentStory.author}
+                uploaderName={(() => {
+                  const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
+                  for (const f of fields) {
+                    const m = f.match(/@([A-Za-z0-9._]+)/);
+                    if (m) return `@${m[1]}`;
+                  }
+                  return undefined;
+                })()}
+                dateText={(() => {
+                  const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
+                  for (const f of fields) {
+                    const m = f.match(/(\d{4}[-\/]\d{2}[-\/]\d{2})/);
+                    if (m) {
+                      const s = m[1].replace(/\//g, '-');
+                      const d = new Date(s);
+                      if (!isNaN(d.getTime())) return d.toLocaleDateString();
+                    }
+                  }
+                  const fallback = currentStory?.publishedAt ? new Date(currentStory.publishedAt) : new Date();
+                  return fallback.toLocaleDateString();
+                })()}
+                avatarUrl={undefined}
+                onClose={onClose}
               />
             </div>
 

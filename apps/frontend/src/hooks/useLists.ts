@@ -7,6 +7,8 @@ export interface ListItem {
   slug?: string;
   thumbnail?: string;
   articleCount?: number;
+  description?: string;
+  category?: string;
 }
 
 function getMediaUrl(file: any): string | undefined {
@@ -24,7 +26,7 @@ export const useLists = () => {
       try {
         const res = await strapiFetch<any>(
           '/api/lists',
-          'populate%5Bcover%5D=true&pagination%5BpageSize%5D=1000'
+          'populate%5Bcover%5D=true&populate%5Bcategory%5D=true&pagination%5BpageSize%5D=1000'
         );
         const data = res.data || [];
         return data.map((e: any) => {
@@ -34,6 +36,8 @@ export const useLists = () => {
             name: attrs.name,
             slug: attrs.slug,
             thumbnail: getMediaUrl(attrs.cover),
+            description: attrs.description,
+            category: attrs.category?.data?.attributes?.name || attrs.category?.name,
             articleCount: Array.isArray(attrs.articles)
               ? attrs.articles.length
               : Array.isArray(attrs.articles?.data)

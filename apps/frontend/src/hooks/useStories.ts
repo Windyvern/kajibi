@@ -26,6 +26,11 @@ function getMime(file: any): string | undefined {
   return entry?.attributes?.mime || entry?.mime;
 }
 
+function getAttr(file: any, key: string): string | undefined {
+  const entry = file?.data?.attributes ? file.data : file;
+  return entry?.attributes?.[key] || entry?.[key];
+}
+
 export const useStories = () => {
   return useQuery({
     queryKey: ['stories'],
@@ -57,6 +62,7 @@ export const useStories = () => {
                 id: `${article.id}-rich-${index}`,
                 type: 'text',
                 content: block.body,
+                slug: `${article.id}-rich-${index}`,
                 orderIndex: index,
               });
               break;
@@ -66,6 +72,7 @@ export const useStories = () => {
                 type: 'quote',
                 title: block.title,
                 content: block.body,
+                slug: `${article.id}-quote-${index}`,
                 orderIndex: index,
               });
               break;
@@ -74,6 +81,9 @@ export const useStories = () => {
                 id: `${article.id}-media-${index}`,
                 type: 'image',
                 media: getMediaUrl(block.file),
+                altText: getAttr(block.file, 'alternativeText'),
+                caption: getAttr(block.file, 'caption'),
+                slug: `${article.id}-media-${index}`,
                 orderIndex: index,
               });
               break;
@@ -83,6 +93,9 @@ export const useStories = () => {
                   id: `${article.id}-slider-${index}-${fileIndex}`,
                   type: 'image',
                   media: getMediaUrl(file),
+                  altText: getAttr(file, 'alternativeText'),
+                  caption: getAttr(file, 'caption'),
+                  slug: `${article.id}-slider-${index}-${fileIndex}`,
                   orderIndex: index + fileIndex / 100,
                 });
               });
@@ -107,6 +120,9 @@ export const useStories = () => {
                     id: `${article.id}-media-${baseIndex + i}`,
                     type,
                     media: url,
+                    altText: getAttr(file, 'alternativeText'),
+                    caption: getAttr(file, 'caption'),
+                    slug: `${article.id}-media-${baseIndex + i}`,
                     orderIndex: baseIndex + i,
                   }
                 : undefined;

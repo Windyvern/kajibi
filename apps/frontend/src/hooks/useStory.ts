@@ -25,6 +25,11 @@ function getMime(file: any): string | undefined {
   return entry?.attributes?.mime || entry?.mime;
 }
 
+function getAttr(file: any, key: string): string | undefined {
+  const entry = file?.data?.attributes ? file.data : file;
+  return entry?.attributes?.[key] || entry?.[key];
+}
+
 function mapArticleToStory(article: any): Story {
   const attrs = article.attributes;
   let panels: StoryPanelData[] = [];
@@ -36,6 +41,7 @@ function mapArticleToStory(article: any): Story {
           id: `${article.id}-rich-${index}`,
           type: 'text',
           content: block.body,
+          slug: `${article.id}-rich-${index}`,
           orderIndex: index,
         });
         break;
@@ -45,6 +51,7 @@ function mapArticleToStory(article: any): Story {
           type: 'quote',
           title: block.title,
           content: block.body,
+          slug: `${article.id}-quote-${index}`,
           orderIndex: index,
         });
         break;
@@ -53,6 +60,9 @@ function mapArticleToStory(article: any): Story {
           id: `${article.id}-media-${index}`,
           type: 'image',
           media: getMediaUrl(block.file),
+          altText: getAttr(block.file, 'alternativeText'),
+          caption: getAttr(block.file, 'caption'),
+          slug: `${article.id}-media-${index}`,
           orderIndex: index,
         });
         break;
@@ -62,6 +72,9 @@ function mapArticleToStory(article: any): Story {
             id: `${article.id}-slider-${index}-${fileIndex}`,
             type: 'image',
             media: getMediaUrl(file),
+            altText: getAttr(file, 'alternativeText'),
+            caption: getAttr(file, 'caption'),
+            slug: `${article.id}-slider-${index}-${fileIndex}`,
             orderIndex: index + fileIndex / 100,
           });
         });
@@ -77,19 +90,22 @@ function mapArticleToStory(article: any): Story {
         ? attrs.media
         : [];
     const baseIndex = panels.length;
-    const extra = (list || [])
-      .map((file: any, i: number) => {
-        const url = getMediaUrl(file);
-        const type = isVideoFile(file, url) ? ('video' as const) : ('image' as const);
-        return url
-          ? {
-              id: `${article.id}-media-${baseIndex + i}`,
-              type,
-              media: url,
-              orderIndex: baseIndex + i,
-            }
-          : undefined;
-      })
+  const extra = (list || [])
+    .map((file: any, i: number) => {
+      const url = getMediaUrl(file);
+      const type = isVideoFile(file, url) ? ('video' as const) : ('image' as const);
+      return url
+        ? {
+            id: `${article.id}-media-${baseIndex + i}`,
+            type,
+            media: url,
+            altText: getAttr(file, 'alternativeText'),
+            caption: getAttr(file, 'caption'),
+            slug: `${article.id}-media-${baseIndex + i}`,
+            orderIndex: baseIndex + i,
+          }
+        : undefined;
+    })
       .filter(Boolean) as StoryPanelData[];
     panels = [...panels, ...extra];
   }

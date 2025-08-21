@@ -35,7 +35,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     // Initialize map
     const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
     const initZoom: number = typeof zoom === 'number' ? zoom : 4;
-    mapInstanceRef.current = L.map(mapRef.current).setView(initCenter, initZoom);
+    mapInstanceRef.current = L.map(mapRef.current, { zoomControl: false }).setView(initCenter, initZoom);
 
     // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -268,6 +268,28 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       markersRef.current.addLayer(marker);
     });
   }, [stories, onStorySelect, selectedStoryId]);
+
+  // Apply external center/zoom changes without creating feedback loops
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const curr = map.getCenter();
+    const currZoom = map.getZoom();
+    const nextLat = center?.lat ?? curr.lat;
+    const nextLng = center?.lng ?? curr.lng;
+    const nextZoom = typeof zoom === 'number' ? zoom : currZoom;
+
+    const latDiff = Math.abs(curr.lat - nextLat);
+    const lngDiff = Math.abs(curr.lng - nextLng);
+    const zoomDiff = Math.abs(currZoom - nextZoom);
+
+    // Avoid jitter: require a meaningful delta and don't animate sync
+    const EPS = 1e-4; // ~11m threshold
+    const needsMove = latDiff > EPS || lngDiff > EPS || zoomDiff >= 1;
+    if (needsMove) {
+      map.setView([nextLat, nextLng], nextZoom, { animate: false });
+    }
+  }, [center?.lat, center?.lng, zoom]);
 
   // Force map to resize when its container changes size (layout switches, panel open/close)
   useEffect(() => {

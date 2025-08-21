@@ -2,9 +2,12 @@ import { Link } from 'react-router-dom';
 import { useLists } from '@/hooks/useLists';
 import { Button } from '@/components/ui/button';
 import { Loader2, Map, Grid3X3 } from 'lucide-react';
+import { SearchBar } from '@/components/SearchBar';
+import { useState } from 'react';
 
 const ListsPage = () => {
   const { data: lists, isLoading, error } = useLists();
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -24,27 +27,69 @@ const ListsPage = () => {
     );
   }
 
+  const q = new URLSearchParams(window.location.search).get('q') || '';
+  const qn = q.toLowerCase();
+  const filteredLists = (lists || []).filter(l =>
+    (l.name || '').toLowerCase().includes(qn)
+    || (l.description || '').toLowerCase().includes(qn)
+    || (l.category || '').toLowerCase().includes(qn)
+  );
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="p-4 flex justify-end gap-2">
-        <Link to="/gallery">
-          <Button variant="outline" className="bg-white/10 border-white/20">
-            <Grid3X3 size={16} className="mr-2" />
-            Galerie
-          </Button>
-        </Link>
-        <Link to="/map">
-          <Button variant="outline" className="bg-white/10 border-white/20">
-            <Map size={16} className="mr-2" />
-            Carte
-          </Button>
-        </Link>
+      {/* Header with centered search and right nav (desktop), stacked on mobile */}
+      <div className="px-4 md:px-6 pt-4">
+        <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
+          <div />
+          <div className="justify-self-center w-full md:w-[540px] lg:w-[620px] xl:w-[720px]">
+            <SearchBar
+              showFilters={filtersOpen}
+              onToggleFilters={() => setFiltersOpen(o => !o)}
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Link to="/gallery">
+              <Button variant="outline" className="bg-white/10 border-white/20">
+                <Grid3X3 size={16} className="mr-2" />
+                Galerie
+              </Button>
+            </Link>
+            <Link to="/map">
+              <Button variant="outline" className="bg-white/10 border-white/20">
+                <Map size={16} className="mr-2" />
+                Carte
+              </Button>
+            </Link>
+          </div>
+        </div>
+        <div className="md:hidden flex flex-col gap-2">
+          <div className="w-full md:w-[720px] mx-auto">
+            <SearchBar
+              showFilters={filtersOpen}
+              onToggleFilters={() => setFiltersOpen(o => !o)}
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Link to="/gallery">
+              <Button variant="outline" className="bg-white/10 border-white/20">
+                <Grid3X3 size={16} className="mr-2" />
+                Galerie
+              </Button>
+            </Link>
+            <Link to="/map">
+              <Button variant="outline" className="bg-white/10 border-white/20">
+                <Map size={16} className="mr-2" />
+                Carte
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
 
       <div className="p-6">
         <h2 className="text-2xl font-bold mb-6 text-foreground">Listes</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {(lists || []).map((l) => (
+          {filteredLists.map((l) => (
             <Link key={l.id} to={`/lists/${encodeURIComponent(l.slug || l.id)}`} className="block group">
               <div className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg">
                 {l.thumbnail ? (

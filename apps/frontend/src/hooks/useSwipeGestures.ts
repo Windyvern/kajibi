@@ -1,5 +1,5 @@
 
-import { useState, useRef, TouchEvent } from "react";
+import { useState, useRef, TouchEvent, MouseEvent } from "react";
 
 interface SwipeHandlers {
   onSwipeLeft?: () => void;
@@ -11,6 +11,8 @@ interface SwipeHandlers {
 export const useSwipeGestures = (handlers: SwipeHandlers) => {
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
+  const [mouseStart, setMouseStart] = useState<{ x: number; y: number } | null>(null);
+  const [mouseEnd, setMouseEnd] = useState<{ x: number; y: number } | null>(null);
 
   const minSwipeDistance = 50;
 
@@ -58,9 +60,42 @@ export const useSwipeGestures = (handlers: SwipeHandlers) => {
     }
   };
 
+  // Mouse gesture support (for desktop dragging)
+  const onMouseDown = (e: MouseEvent) => {
+    setMouseEnd(null);
+    setMouseStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (mouseStart) setMouseEnd({ x: e.clientX, y: e.clientY });
+  };
+
+  const onMouseUp = () => {
+    if (!mouseStart || !mouseEnd) return;
+    const distanceX = mouseStart.x - mouseEnd.x;
+    const distanceY = mouseStart.y - mouseEnd.y;
+    const isLeftSwipe = distanceX > minSwipeDistance;
+    const isRightSwipe = distanceX < -minSwipeDistance;
+    const isUpSwipe = distanceY > minSwipeDistance;
+    const isDownSwipe = distanceY < -minSwipeDistance;
+
+    if (Math.abs(distanceX) > Math.abs(distanceY)) {
+      if (isLeftSwipe && handlers.onSwipeLeft) handlers.onSwipeLeft();
+      if (isRightSwipe && handlers.onSwipeRight) handlers.onSwipeRight();
+    } else {
+      if (isUpSwipe && handlers.onSwipeUp) handlers.onSwipeUp();
+      if (isDownSwipe && handlers.onSwipeDown) handlers.onSwipeDown();
+    }
+    setMouseStart(null);
+    setMouseEnd(null);
+  };
+
   return {
     onTouchStart,
     onTouchMove,
     onTouchEnd,
+    onMouseDown,
+    onMouseMove,
+    onMouseUp,
   };
 };

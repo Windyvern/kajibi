@@ -5,6 +5,9 @@ export interface StoryPanelData {
   title?: string;
   content?: string;
   media?: string; // URL or ID for images/videos
+  altText?: string;
+  caption?: string;
+  slug?: string; // stable slug for deep-linking panels
   duration?: number; // in seconds
   orderIndex: number;
 }
