@@ -22,12 +22,15 @@ interface MapProps {
   center?: { lat: number; lng: number };
   zoom?: number;
   onViewChange?: (center: { lat: number; lng: number }, zoom: number) => void;
+  fitBounds?: [[number, number], [number, number]];
+  fitPadding?: number;
 }
 
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, fitBounds, fitPadding = 60 }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
+  const lastFitKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -37,32 +40,29 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     const initZoom: number = typeof zoom === 'number' ? zoom : 4;
     mapInstanceRef.current = L.map(mapRef.current, { zoomControl: false }).setView(initCenter, initZoom);
 
-    // Add tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
+    // Add tile layer (Carto light style to match legacy design)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap, &copy; CARTO',
+      subdomains: 'abcd'
     }).addTo(mapInstanceRef.current);
 
     // Initialize marker cluster group
     markersRef.current = L.markerClusterGroup({
-      maxClusterRadius: 50,
+      maxClusterRadius: 80,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
-        const markers = cluster.getAllChildMarkers();
-        const latestMarker = markers[0]; // Get the first marker
-        const thumbnailUrl = (latestMarker as any).thumbnailUrl || null;
-        
+        const childMarkers = cluster.getAllChildMarkers();
+        const first = childMarkers[0] as any;
+        const thumbnailUrl = first?.thumbnailUrl || null;
         return L.divIcon({
           html: `
             <div class="marker-container">
-              <div class="cluster-marker">
-                ${thumbnailUrl 
-                  ? `<img src="${thumbnailUrl}" alt="Cluster" class="cluster-thumbnail" />` 
-                  : `<div class="marker-placeholder">+</div>`
-                }
-                <div class="cluster-count">${count}</div>
+              <div class="marker-frame">
+                ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" />` : ''}
               </div>
               <span class="arrow"></span>
             </div>
+            <div class="cluster-counter ${count < 10 ? 'cluster-small' : ''}">${count}</div>
           `,
           className: 'custom-cluster-icon',
           iconSize: L.point(96, 190),
@@ -91,13 +91,15 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         display: flex;
         flex-direction: column;
         align-items: center;
+        transition: transform 0.2s ease;
       }
       .marker-frame {
         display: inline-block;
-        background: #f0f0f0;
+        background: none;
         border: 2px solid #fff;
         border-radius: 15px;
         box-sizing: border-box;
+        background-color: #f0f0f0;
         padding: 5px;
         width: 96px;
         height: 170px;
@@ -107,12 +109,14 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         justify-content: center;
         position: relative;
         overflow: hidden;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
         cursor: pointer;
         transition: all 0.2s ease;
       }
-      .marker-frame:hover {
+      .marker-container:hover {
         transform: scale(1.05);
+      }
+      .marker-container:hover .marker-frame {
         box-shadow: 0 6px 20px rgba(0,0,0,0.3);
       }
       .marker-frame.selected {
@@ -120,10 +124,14 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         border: 2px solid #3b82f6;
       }
       .marker-frame img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 10px;
+        display: block;
+        background: none;
+        width: 96px;
+        height: 170px;
+        margin-top: 5px;
+        margin-bottom: 0px;
+        max-width: 100%;
+        max-height: 100%;
       }
       .marker-placeholder {
         width: 100%;
@@ -138,61 +146,38 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         font-size: 24px;
       }
       .arrow {
-        width: 0;
-        height: 0;
-        border-left: 12px solid transparent;
-        border-right: 12px solid transparent;
-        border-top: 20px solid #fff;
-        margin-top: -2px;
-        position: relative;
-      }
-      .arrow::before {
-        content: '';
         position: absolute;
-        top: -23px;
-        left: -10px;
-        width: 0;
-        height: 0;
-        border-left: 10px solid transparent;
-        border-right: 10px solid transparent;
-        border-top: 18px solid #f0f0f0;
+        bottom: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 10px solid #fff;
       }
-      .cluster-marker {
-        display: inline-block;
-        background: none;
-        border: 2px solid #fff;
-        border-radius: 15px;
-        box-sizing: border-box;
-        background-color: #f0f0f0;
-        padding: 5px;
-        width: 96px;
-        height: 170px;
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
-        cursor: pointer;
-      }
-      .cluster-count {
+      .cluster-counter {
         position: absolute;
-        top: 5px;
-        right: 5px;
-        background: #3b82f6;
+        top: 8px;
+        right: -12px;
+        background-color: red;
         color: white;
-        border-radius: 50%;
-        width: 30px;
-        height: 30px;
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        height: 28px;
+        min-width: 28px;
+        padding: 0 8px;
+        border-radius: 14px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: bold;
-        font-size: 14px;
-        z-index: 1;
+        line-height: 1;
+        box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
       }
-      .cluster-thumbnail {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 10px;
+      .cluster-counter.cluster-small {
+        width: 28px;
+        min-width: 28px;
+        padding: 0;
+        border-radius: 50%;
       }
       .custom-cluster-icon {
         background: transparent !important;
@@ -290,6 +275,19 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       map.setView([nextLat, nextLng], nextZoom, { animate: false });
     }
   }, [center?.lat, center?.lng, zoom]);
+
+  // Apply fitBounds when prop changes (once per unique bounds)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !fitBounds) return;
+    const key = JSON.stringify(fitBounds);
+    if (lastFitKeyRef.current === key) return;
+    try {
+      const b = L.latLngBounds([L.latLng(fitBounds[0][0], fitBounds[0][1]), L.latLng(fitBounds[1][0], fitBounds[1][1])]);
+      map.fitBounds(b, { padding: [fitPadding, fitPadding], animate: false });
+      lastFitKeyRef.current = key;
+    } catch {}
+  }, [fitBounds, fitPadding]);
 
   // Force map to resize when its container changes size (layout switches, panel open/close)
   useEffect(() => {

@@ -26,6 +26,11 @@ const MapView = () => {
   // Track viewport to trigger re-render on resize and switch layouts live
   const [viewport, setViewport] = useState({ w: window.innerWidth, h: window.innerHeight });
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Precomputed global bounds to show France and Japan
+  const globalBounds: [[number, number], [number, number]] = useMemo(() => {
+    // France approx center ~ [46.2, 2.2], Japan ~ [36.2, 138.3]
+    return [[46.2, 2.2], [36.2, 138.3]];
+  }, []);
   useEffect(() => {
     const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener('resize', onResize);
@@ -166,14 +171,14 @@ const MapView = () => {
             <div className="flex flex-col items-start gap-2">
               <Button
                 variant="default"
-                className="bg-white text-gray-900 shadow-md h-12 w-12 p-0"
+                className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
                 onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom + 1)) }))}
               >
                 <Plus size={18} />
               </Button>
               <Button
                 variant="default"
-                className="bg-white text-gray-900 shadow-md h-12 w-12 p-0"
+                className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
                 onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
               >
                 <Minus size={18} />
@@ -191,13 +196,13 @@ const MapView = () => {
             {/* Right: Nav buttons */}
             <div className="flex items-center justify-end gap-2">
               <Link to="/gallery">
-                <Button variant="default" className="bg-white text-gray-900 shadow-md">
+                <Button variant="default" className="bg-white text-gray-900 shadow-md rounded-full">
                   <Grid3X3 size={16} className="mr-2" />
                   Galerie
                 </Button>
               </Link>
               <Link to="/lists">
-                <Button variant="default" className="bg-white text-gray-900 shadow-md">
+                <Button variant="default" className="bg-white text-gray-900 shadow-md rounded-full">
                   <List size={16} className="mr-2" />
                   Listes
                 </Button>
@@ -320,6 +325,8 @@ const MapView = () => {
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
                 onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                fitBounds={!selectedStory && !q ? globalBounds : undefined}
+                fitPadding={40}
               />
             )}
           </div>
@@ -422,6 +429,8 @@ const MapView = () => {
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
                 onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                fitBounds={!selectedStory && !q ? globalBounds : undefined}
+                fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
               />
             </div>
           )

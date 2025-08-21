@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@amicaldo/strapi-google-maps": "^2.0.2",
     "react-leaflet": "^4.2.1"
   }
 }
