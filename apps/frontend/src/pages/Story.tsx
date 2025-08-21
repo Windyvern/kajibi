@@ -24,25 +24,6 @@ const StoryPage = () => {
     }
   }, [isLoading, stories, target, navigate]);
 
-  if (isLoading || !stories) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white">
-        <div className="flex items-center gap-2">
-          <Loader2 className="animate-spin" size={20} />
-          <span>Chargement…</span>
-        </div>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white">
-        <span>Erreur de chargement</span>
-      </div>
-    );
-  }
-  if (!target) return null;
-
   // Redirect geo stories to map once target is known (preserve ?panel and ?from)
   useEffect(() => {
     if (target && target.geo) {
@@ -65,6 +46,25 @@ const StoryPage = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [navigate]);
+
+  if (isLoading || !stories) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+        <div className="flex items-center gap-2">
+          <Loader2 className="animate-spin" size={20} />
+          <span>Chargement…</span>
+        </div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+        <span>Erreur de chargement</span>
+      </div>
+    );
+  }
+  if (!target) return null;
 
   // Non-geo: center viewer + description on desktop; keep full-screen viewer on mobile
   return (

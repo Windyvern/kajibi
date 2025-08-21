@@ -36,10 +36,18 @@ export const TwoPanelStoryViewer = ({
   });
   const [currentPanelIndex, setCurrentPanelIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [panelProgress, setPanelProgress] = useState(0); // 0..1
+  const [panelDuration, setPanelDuration] = useState<number>(5);
   const [showGallery, setShowGallery] = useState(false);
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [showMetadataPanel, setShowMetadataPanel] = useState(false);
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
+
+  // Refs to stabilize timers and callbacks
+  const nextRef = useRef<() => void>(() => {});
+  const nonVideoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const nonVideoLastTickRef = useRef<number | null>(null);
+  const nonVideoProgressRef = useRef<number>(0);
 
   const currentStory = stories[currentStoryIndex];
   const hasPanels = (currentStory?.panels?.length || 0) > 0;
@@ -127,6 +135,8 @@ export const TwoPanelStoryViewer = ({
       setCurrentPanelIndex(0);
     }
   }, [currentStoryIndex, currentPanelIndex, currentStory, stories.length]);
+  // Keep a stable ref to the latest next handler without retriggering effects
+  nextRef.current = goToNextPanel;
 
   const goToPreviousPanel = useCallback(() => {
     if (currentPanelIndex > 0) {
@@ -165,16 +175,52 @@ export const TwoPanelStoryViewer = ({
     setShowMetadataPanel(false);
   };
 
-  // Auto-advance timer
+  // Reset progress and set duration on panel/story changes
   useEffect(() => {
-    if (!isAutoPlaying || showGallery) return;
+    setPanelProgress(0);
+    nonVideoProgressRef.current = 0;
+    nonVideoLastTickRef.current = null;
+    const fallback = currentPanel?.duration && currentPanel.duration > 0 ? currentPanel.duration : 5;
+    setPanelDuration(fallback);
+  }, [currentPanelIndex, currentStoryIndex, currentPanel?.duration]);
 
-    const timer = setTimeout(() => {
-      goToNextPanel();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [currentPanelIndex, currentStoryIndex, isAutoPlaying, goToNextPanel, showGallery]);
+  // Smooth progress for non-video panels using delta timer that pauses/resumes without resetting
+  useEffect(() => {
+    const isVideo = currentPanel?.type === 'video';
+    // Cleanup any existing timer first
+    if (nonVideoTimerRef.current) {
+      clearInterval(nonVideoTimerRef.current);
+      nonVideoTimerRef.current = null;
+    }
+    if (!isAutoPlaying || showGallery || isVideo) return;
+    const totalMs = Math.max(0.5, panelDuration) * 1000;
+    nonVideoLastTickRef.current = null; // restart delta tracking
+    nonVideoTimerRef.current = setInterval(() => {
+      const now = Date.now();
+      const last = nonVideoLastTickRef.current;
+      nonVideoLastTickRef.current = now;
+      const delta = last ? now - last : 0;
+      const inc = delta / totalMs;
+      if (inc > 0) {
+        nonVideoProgressRef.current = Math.min(1, nonVideoProgressRef.current + inc);
+        const p = nonVideoProgressRef.current;
+        setPanelProgress(p);
+        if (p >= 1) {
+          if (nonVideoTimerRef.current) {
+            clearInterval(nonVideoTimerRef.current);
+            nonVideoTimerRef.current = null;
+          }
+          nextRef.current();
+        }
+      }
+    }, 50);
+    return () => {
+      if (nonVideoTimerRef.current) {
+        clearInterval(nonVideoTimerRef.current);
+        nonVideoTimerRef.current = null;
+      }
+    };
+  }, [currentPanelIndex, currentStoryIndex, currentPanel?.type, isAutoPlaying, showGallery, panelDuration]);
 
   // Mobile swipe gesture support
   const mobileSwipeHandlers = useSwipeGestures({
@@ -213,6 +259,30 @@ export const TwoPanelStoryViewer = ({
     onSwipeLeft: goToNextPanel,
     onSwipeRight: goToPreviousPanel,
   });
+
+  // Keyboard arrow navigation
+  useEffect(() => {
+    const isEditable = (el: EventTarget | null) => {
+      const t = el as HTMLElement | null;
+      if (!t) return false;
+      const tag = t.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+      if ((t as HTMLElement).isContentEditable) return true;
+      return false;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditable(e.target)) return;
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToNextPanel();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPreviousPanel();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [goToNextPanel, goToPreviousPanel]);
 
   // Calculate responsive panel visibility based on window aspect ratio
   const [windowAspectRatio, setWindowAspectRatio] = useState(window.innerWidth / window.innerHeight);
@@ -263,6 +333,10 @@ export const TwoPanelStoryViewer = ({
 
   return (
     <div className="min-h-screen bg-black">
+      {/* Helper to extract date from current media filename */}
+      {(() => { /* placeholder to keep JSX type */ })()}
+      {/* computeMediaDate returns a localized date string from media filename, else undefined */}
+      {null}
       {/* Mobile Layout - Single Panel with sliding metadata */}
       <div className="md:hidden">
         <div 
@@ -272,14 +346,13 @@ export const TwoPanelStoryViewer = ({
             if (e.deltaY < -30 && !showMetadataPanel) setShowMetadataPanel(true);
             if (e.deltaY > 30 && showMetadataPanel) setShowMetadataPanel(false);
           }}
-          onMouseEnter={() => setIsAutoPlaying(false)}
-          onMouseLeave={() => setIsAutoPlaying(true)}
         >
           {/* Progress Bar */}
           <div className="absolute top-0 left-0 right-0 z-20 p-4">
             <ProgressBar
               totalPanels={currentStory.panels.length}
               currentPanel={currentPanelIndex}
+              currentProgress={panelProgress}
               storyTitle={currentStory.title}
               author={currentStory.author}
               uploaderName={(() => {
@@ -291,17 +364,15 @@ export const TwoPanelStoryViewer = ({
                 return undefined;
               })()}
               dateText={(() => {
-                const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
-                for (const f of fields) {
-                  const m = f.match(/(\d{4}[-\/]\d{2}[-\/]\d{2})/);
-                  if (m) {
-                    const s = m[1].replace(/\//g, '-');
-                    const d = new Date(s);
-                    if (!isNaN(d.getTime())) return d.toLocaleDateString();
-                  }
+                const media = currentPanel?.media || '';
+                const file = media.split('?')[0].split('#')[0].split('/').pop() || media;
+                const m = file.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+                if (m) {
+                  const iso = `${m[1]}-${m[2]}-${m[3]}`;
+                  const d = new Date(iso);
+                  if (!isNaN(d.getTime())) return d.toLocaleDateString();
                 }
-                const fallback = currentStory?.publishedAt ? new Date(currentStory.publishedAt) : new Date();
-                return fallback.toLocaleDateString();
+                return undefined;
               })()}
               avatarUrl={undefined}
               onClose={onClose}
@@ -323,8 +394,33 @@ export const TwoPanelStoryViewer = ({
           >
             {/* Width derived from height to keep 9:16: width = 56.25vh */}
             <div style={{ width: '56.25vh', height: '100vh' }} className="flex items-center justify-center">
-              <StoryPanel panel={currentPanel} />
+              <StoryPanel 
+                panel={currentPanel}
+                onVideoMeta={(dur) => setPanelDuration(dur)}
+                onVideoTime={(t, d) => {
+                  const p = Math.max(0, Math.min(1, t / d));
+                  setPanelProgress(p);
+                }}
+                onVideoEnded={() => { if (isAutoPlaying) goToNextPanel(); }}
+              />
             </div>
+
+            {/* Mobile Navigation Arrows */}
+            <button
+              onClick={(e) => { e.stopPropagation(); goToPreviousPanel(); }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 active:bg-black/60"
+              aria-label="Previous"
+              disabled={currentStoryIndex === 0 && currentPanelIndex === 0}
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); goToNextPanel(); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 active:bg-black/60"
+              aria-label="Next"
+            >
+              <ChevronRight size={22} />
+            </button>
           </div>
 
           {/* Sliding Metadata Panel */}
@@ -382,14 +478,13 @@ export const TwoPanelStoryViewer = ({
               height: '100%'
             }}
             {...desktopSwipeHandlers}
-            onMouseEnter={() => setIsAutoPlaying(false)}
-            onMouseLeave={() => setIsAutoPlaying(true)}
           >
             {/* Progress Bar */}
             <div className="absolute top-0 left-0 right-0 z-20 p-4">
               <ProgressBar
                 totalPanels={currentStory.panels.length}
                 currentPanel={currentPanelIndex}
+                currentProgress={panelProgress}
                 storyTitle={currentStory.title}
                 author={currentStory.author}
                 uploaderName={(() => {
@@ -401,17 +496,15 @@ export const TwoPanelStoryViewer = ({
                   return undefined;
                 })()}
                 dateText={(() => {
-                  const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
-                  for (const f of fields) {
-                    const m = f.match(/(\d{4}[-\/]\d{2}[-\/]\d{2})/);
-                    if (m) {
-                      const s = m[1].replace(/\//g, '-');
-                      const d = new Date(s);
-                      if (!isNaN(d.getTime())) return d.toLocaleDateString();
-                    }
+                  const media = currentPanel?.media || '';
+                  const file = media.split('?')[0].split('#')[0].split('/').pop() || media;
+                  const m = file.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+                  if (m) {
+                    const iso = `${m[1]}-${m[2]}-${m[3]}`;
+                    const d = new Date(iso);
+                    if (!isNaN(d.getTime())) return d.toLocaleDateString();
                   }
-                  const fallback = currentStory?.publishedAt ? new Date(currentStory.publishedAt) : new Date();
-                  return fallback.toLocaleDateString();
+                  return undefined;
                 })()}
                 avatarUrl={undefined}
                 onClose={onClose}
@@ -431,12 +524,20 @@ export const TwoPanelStoryViewer = ({
               className="w-full h-screen cursor-pointer"
               onClick={handlePanelClick}
             >
-              <StoryPanel panel={currentPanel} />
+              <StoryPanel 
+                panel={currentPanel}
+                onVideoMeta={(dur) => setPanelDuration(dur)}
+                onVideoTime={(t, d) => {
+                  const p = Math.max(0, Math.min(1, t / d));
+                  setPanelProgress(p);
+                }}
+                onVideoEnded={() => { if (isAutoPlaying) goToNextPanel(); }}
+              />
             </div>
 
             {/* Navigation Arrows */}
             <button
-              onClick={goToPreviousPanel}
+              onClick={(e) => { e.stopPropagation(); goToPreviousPanel(); }}
               className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-all duration-200"
               disabled={currentStoryIndex === 0 && currentPanelIndex === 0}
             >
@@ -444,7 +545,7 @@ export const TwoPanelStoryViewer = ({
             </button>
             
             <button
-              onClick={goToNextPanel}
+              onClick={(e) => { e.stopPropagation(); goToNextPanel(); }}
               className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-all duration-200"
             >
               <ChevronRight size={24} />

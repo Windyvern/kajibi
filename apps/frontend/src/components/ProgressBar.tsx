@@ -4,6 +4,8 @@ import { X } from 'lucide-react';
 interface ProgressBarProps {
   totalPanels: number;
   currentPanel: number;
+  // 0..1 progress for the current panel
+  currentProgress?: number;
   storyTitle: string;
   author: string;
   uploaderName?: string;
@@ -12,29 +14,27 @@ interface ProgressBarProps {
   onClose?: () => void;
 }
 
-export const ProgressBar = ({ totalPanels, currentPanel, storyTitle, author, uploaderName, dateText, avatarUrl, onClose }: ProgressBarProps) => {
+export const ProgressBar = ({ totalPanels, currentPanel, currentProgress = 0, storyTitle, author, uploaderName, dateText, avatarUrl, onClose }: ProgressBarProps) => {
   const name = uploaderName || author;
   const dateLabel = dateText || new Date().toLocaleDateString();
   return (
     <div className="w-full">
       {/* Progress segments */}
       <div className="flex gap-1 mb-3">
-        {Array.from({ length: totalPanels }, (_, index) => (
-          <div
-            key={index}
-            className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden"
-          >
-            <div
-              className={`h-full transition-all duration-300 ${
-                index < currentPanel
-                  ? "w-full bg-white"
-                  : index === currentPanel
-                  ? "w-full bg-white animate-pulse"
-                  : "w-0 bg-white"
-              }`}
-            />
-          </div>
-        ))}
+        {Array.from({ length: totalPanels }, (_, index) => {
+          const isPast = index < currentPanel;
+          const isCurrent = index === currentPanel;
+          const baseColor = '#ffffff4d'; // half-transparent white background
+          const fillWidth = isPast ? '100%' : isCurrent ? `${Math.max(0, Math.min(100, currentProgress * 100))}%` : '0%';
+          return (
+            <div key={index} className="flex-1 h-1 rounded-full overflow-hidden" style={{ backgroundColor: baseColor }}>
+              <div
+                className="h-full"
+                style={{ width: fillWidth, backgroundColor: '#ffffffff', transition: 'width 120ms linear' }}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* Story info header */}
