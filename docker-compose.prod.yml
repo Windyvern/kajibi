@@ -3,23 +3,28 @@ version: '3.8'
 services:
   # Do not expose Strapi directly in production
   api:
-    ports: []
+    ports: null
     command: start
-    volumes: []
+    volumes: null
+    environment:
+      # Allow Strapi CORS to accept the public origin served by nginx
+      FRONTEND_URL: http://localhost
 
   # Do not expose the proxy directly; only nginx is public
   proxy:
-    ports: []
+    ports: null
+    volumes: null
 
   # Frontend is only reachable through nginx
   web:
-    ports: []
+    ports: null
     build:
       context: ./apps/frontend
       dockerfile: Dockerfile
       args:
         VITE_API_BASE: /
         VITE_STRAPI_URL: /
+    volumes: null
 
   # Public entrypoint
   nginx:
