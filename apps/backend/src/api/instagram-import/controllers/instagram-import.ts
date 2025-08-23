@@ -331,7 +331,8 @@ export default {
       return;
     }
     try {
-      await execFileAsync('unzip', ['-qq', tmpZip, '-d', tmpBase], { timeout: 60000 });
+      // Large archives can take a long time to extract. Remove the 60s timeout.
+      await execFileAsync('unzip', ['-qq', tmpZip, '-d', tmpBase], { timeout: 0 });
     } catch (e: any) {
       ctx.status = 500;
       ctx.body = { error: `unzip failed: ${e?.message}` };

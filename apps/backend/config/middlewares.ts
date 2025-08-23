@@ -39,7 +39,18 @@ export default ({ env }) => {
     },
     'strapi::poweredBy',
     'strapi::query',
-    'strapi::body',
+    {
+      name: 'strapi::body',
+      config: {
+        jsonLimit: '10mb',
+        formLimit: '10mb',
+        textLimit: '10mb',
+        formidable: {
+          // Allow very large multipart uploads (e.g., 2GB Instagram archive)
+          maxFileSize: env.int('UPLOAD_MAX_FILESIZE', 2 * 1024 * 1024 * 1024),
+        },
+      },
+    },
     'strapi::session',
     'strapi::favicon',
     'strapi::public',
