@@ -25,6 +25,8 @@ services:
       - "1337:1337"
     volumes:
       - ./apps/backend:/opt/app
+      # Prevent host node_modules (darwin) from shadowing container's (linux)
+      - backend_node_modules:/opt/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,4 +63,5 @@ services:
 
 volumes:
   postgres_data:
+  backend_node_modules:
 

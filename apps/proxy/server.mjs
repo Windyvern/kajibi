@@ -16,10 +16,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Require API token to avoid exposing Strapi publicly without auth
+// Optional API token: allow public GET/HEAD without a token so Strapi Public role applies.
+// Require a token only for write operations to avoid exposing unsafe methods.
 app.use((req, res, next) => {
-  if (!TOKEN) {
-    return res.status(500).json({ error: 'STRAPI_API_TOKEN is not set' });
+  const method = req.method.toUpperCase();
+  const isRead = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+  if (!TOKEN && !isRead) {
+    return res.status(401).json({ error: 'API token required for non-read operations' });
   }
   next();
 });
@@ -43,10 +46,12 @@ app.all('*', async (req, res) => {
     // Preserve content-type for body passthrough
     const contentType = req.headers['content-type'];
     if (contentType) headers.set('content-type', contentType);
-    headers.set('authorization', `Bearer ${TOKEN}`);
-
+    // Only attach Authorization for non-read operations; reads use Strapi Public role
     const method = req.method.toUpperCase();
-    const hasBody = !['GET', 'HEAD'].includes(method) && req.body && req.body.length > 0;
+    const isRead = method === 'GET' || method === 'HEAD';
+    if (!isRead && TOKEN) headers.set('authorization', `Bearer ${TOKEN}`);
+
+    const hasBody = !isRead && req.body && req.body.length > 0;
 
     const upstream = await fetch(url, {
       method,

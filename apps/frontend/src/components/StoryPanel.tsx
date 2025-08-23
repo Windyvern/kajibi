@@ -5,9 +5,12 @@ import { StoryPanelData } from "@/types/story";
 
 interface StoryPanelProps {
   panel: StoryPanelData;
+  onVideoMeta?: (durationSec: number) => void;
+  onVideoTime?: (currentSec: number, durationSec: number) => void;
+  onVideoEnded?: () => void;
 }
 
-export const StoryPanel = ({ panel }: StoryPanelProps) => {
+export const StoryPanel = ({ panel, onVideoMeta, onVideoTime, onVideoEnded }: StoryPanelProps) => {
   const [muted, setMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -96,8 +99,20 @@ export const StoryPanel = ({ panel }: StoryPanelProps) => {
                 autoPlay
                 muted={muted}
                 preload="auto"
-                loop
                 playsInline
+                onLoadedMetadata={(e) => {
+                  const v = e.currentTarget;
+                  if (v && isFinite(v.duration) && v.duration > 0) {
+                    onVideoMeta?.(v.duration);
+                  }
+                }}
+                onTimeUpdate={(e) => {
+                  const v = e.currentTarget;
+                  if (v && isFinite(v.duration) && v.duration > 0) {
+                    onVideoTime?.(v.currentTime, v.duration);
+                  }
+                }}
+                onEnded={() => onVideoEnded?.()}
               />
             )}
             {/* Mute/Unmute toggle */}
