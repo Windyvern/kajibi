@@ -4,6 +4,7 @@ services:
   # Do not expose Strapi directly in production
   api:
     ports: []
+    command: start
 
   # Do not expose the proxy directly; only nginx is public
   proxy:
