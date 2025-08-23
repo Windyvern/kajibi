@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # Do not expose Strapi directly in production
+  api:
+    ports: []
+
+  # Do not expose the proxy directly; only nginx is public
+  proxy:
+    ports: []
+
+  # Frontend is only reachable through nginx
+  web:
+    ports: []
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: /
+        VITE_STRAPI_URL: /
+
+  # Public entrypoint
+  nginx:
+    build: ./apps/nginx
+    depends_on:
+      - web
+      - api
+      - proxy
+    ports:
+      - "80:80"
+    volumes:
+      # Mount your real htpasswd file here (generate with: htpasswd -nb <user> <pass>)
+      - ./apps/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
