@@ -38,3 +38,6 @@ docker-data/
 
 # Local samples for Codex debugging
 ForCodex/
+ 
+# Secrets for reverse proxy
+apps/nginx/.htpasswd
