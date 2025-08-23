@@ -26,7 +26,7 @@ const MapView = () => {
   const computeInitialView = () => {
     const aspect = window.innerWidth / window.innerHeight;
     const center = { lat: 41.5, lng: 70 }; // midpoint across FR-JP
-    const zoom = aspect >= 1.4 ? 3 : aspect >= 0.8 ? 3 : 2;
+    const zoom = aspect >= 1.4 ? 3 : aspect >= 0.8 ? 2 : 2;
     return { center, zoom };
   };
   const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>(() => computeInitialView());
@@ -276,30 +276,7 @@ const MapView = () => {
             />
           </div>
         ) : (
-          <div className="relative h-screen">
-            {/* Mobile Map/List Toggle */}
-            {!selectedStory ? (
-              <div className="absolute top-4 right-4 z-20">
-                <Button
-                  onClick={() => setShowMobileList(!showMobileList)}
-                  className="rounded-full shadow-lg"
-                  size="sm"
-                >
-                  <List size={16} />
-                </Button>
-              </div>
-            ) : (
-              <div className="absolute top-4 right-4 z-20">
-                <Button
-                  onClick={handleCloseStory}
-                  className="rounded-full shadow-lg"
-                  size="sm"
-                >
-                  ×
-                </Button>
-              </div>
-            )}
-
+          <div className="relative h-[100svh]">
             {showMobileList ? (
               <div className="h-full overflow-y-auto bg-white p-4">
                 <h2 className="text-xl font-bold mb-4">Stories</h2>
@@ -329,16 +306,17 @@ const MapView = () => {
                 </div>
               </div>
             ) : (
-              <Map
-                stories={visibleStories}
-                onStorySelect={handleStorySelect}
-                selectedStoryId={selectedStory?.id}
-                center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
-                zoom={mapView.zoom}
-                onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
-                
-                fitPadding={40}
-              />
+              <div className="h-full">
+                <Map
+                  stories={visibleStories}
+                  onStorySelect={handleStorySelect}
+                  selectedStoryId={selectedStory?.id}
+                  center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
+                  zoom={mapView.zoom}
+                  onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                  fitPadding={40}
+                />
+              </div>
             )}
           </div>
         )}
