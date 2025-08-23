@@ -5,6 +5,7 @@ services:
   api:
     ports: []
     command: start
+    volumes: []
 
   # Do not expose the proxy directly; only nginx is public
   proxy:
