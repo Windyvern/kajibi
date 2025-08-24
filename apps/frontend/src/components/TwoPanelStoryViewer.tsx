@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Grid3X3, X, ChevronDown, ChevronUp, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { ChevronLeft, ChevronRight, Grid3X3, X, ChevronDown, ChevronUp, Pause, Play, Volume2, VolumeX, ChevronsUp } from "lucide-react";
 import { StoryPanel } from "./StoryPanel";
 import { ProgressBar } from "./ProgressBar";
 import { StoryGalleryOverlay } from "./StoryGalleryOverlay";
@@ -44,6 +44,7 @@ export const TwoPanelStoryViewer = ({
   };
   const [mutedUI, setMutedUI] = useState<boolean>(readInitialMuted());
   const [muteToggleTick, setMuteToggleTick] = useState(0);
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
   const [panelProgress, setPanelProgress] = useState(0); // 0..1
   const [panelDuration, setPanelDuration] = useState<number>(5);
   const [showGallery, setShowGallery] = useState(false);
@@ -236,6 +237,8 @@ export const TwoPanelStoryViewer = ({
     setMutedUI(readInitialMuted());
   }, [currentPanelIndex]);
 
+  // (moved below isMdUp declaration)
+
   // Mobile swipe gesture support
   const mobileSwipeHandlers = useSwipeGestures({
     onSwipeUp: () => {
@@ -324,6 +327,17 @@ export const TwoPanelStoryViewer = ({
 
   const shouldShowRightPanel = !hideRightPanel && windowAspectRatio >= 16/9; // Show only if aspect ratio is 16:9 or wider
   const shouldShowMetadataPanel = !hideMetadataPanel && windowAspectRatio >= 4/3; // Show only if aspect ratio is 4:3 or wider
+
+  // Show a furtive swipe-up hint on mobile each time a story opens
+  useEffect(() => {
+    if (isMdUp) return; // only mobile layout
+    try {
+      setShowSwipeHint(true);
+      // total visible time = delay (0.5s) + animation duration (1s)
+      const t = setTimeout(() => setShowSwipeHint(false), 1500);
+      return () => clearTimeout(t);
+    } catch {}
+  }, [isMdUp, currentStory?.id]);
 
   const handlePanelClick = (event: React.MouseEvent) => {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
@@ -502,6 +516,23 @@ export const TwoPanelStoryViewer = ({
         >
           <ChevronRight size={22} />
         </button>
+
+        {/* Furtive swipe-up hint – white, subtle, 1s animation */}
+        {showSwipeHint && (
+          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-14 z-30 flex flex-col items-center justify-center opacity-90">
+            <style>{`
+              @keyframes kajiSwipeUpOnce {
+                0% { transform: translateY(8px); opacity: 0; }
+                20% { opacity: 1; }
+                80% { opacity: 1; }
+                100% { transform: translateY(-8px); opacity: 0; }
+              }
+            `}</style>
+            <div style={{ animation: 'kajiSwipeUpOnce 1s ease-out 0.5s forwards', opacity: 0 }}>
+              <ChevronsUp size={56} color="#FFFFFF" />
+            </div>
+          </div>
+        )}
       </div>
 
       <div 

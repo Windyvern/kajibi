@@ -12,6 +12,22 @@ const StoryPage = () => {
   const [params] = useSearchParams();
   const initialPanelId = params.get('panel') || undefined;
 
+  // Track viewport for conditional rendering (avoid double-mount viewers)
+  const [isMdUp, setIsMdUp] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && 'matchMedia' in window) {
+      return window.matchMedia('(min-width: 768px)').matches;
+    }
+    return false;
+  });
+  useEffect(() => {
+    if (!(typeof window !== 'undefined' && 'matchMedia' in window)) return;
+    const mql = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setIsMdUp(mql.matches);
+    try { mql.addEventListener('change', onChange); } catch { mql.addListener(onChange); }
+    onChange();
+    return () => { try { mql.removeEventListener('change', onChange); } catch { mql.removeListener(onChange); } };
+  }, []);
+
   const target = useMemo(() => {
     if (!stories || !slug) return null;
     return stories.find((s) => (s.handle || '').toLowerCase() === slug.toLowerCase()) || null;
@@ -65,23 +81,6 @@ const StoryPage = () => {
     );
   }
   if (!target) return null;
-
-  // Track viewport for conditional rendering (avoid double-mount viewers)
-  const [isMdUp, setIsMdUp] = useState<boolean>(() => {
-    if (typeof window !== 'undefined' && 'matchMedia' in window) {
-      return window.matchMedia('(min-width: 768px)').matches;
-    }
-    return false;
-  });
-  useEffect(() => {
-    if (!(typeof window !== 'undefined' && 'matchMedia' in window)) return;
-    const mql = window.matchMedia('(min-width: 768px)');
-    const onChange = () => setIsMdUp(mql.matches);
-    // modern
-    try { mql.addEventListener('change', onChange); } catch { mql.addListener(onChange); }
-    onChange();
-    return () => { try { mql.removeEventListener('change', onChange); } catch { mql.removeListener(onChange); } };
-  }, []);
 
   // Non-geo: center viewer + description on desktop; keep full-screen viewer on mobile
   return (
