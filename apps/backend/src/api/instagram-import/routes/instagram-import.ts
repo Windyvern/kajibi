@@ -8,5 +8,13 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'GET',
+      path: '/instagram-import/status',
+      handler: 'api::instagram-import.instagram-import.status',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

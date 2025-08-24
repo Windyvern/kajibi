@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useStories } from '@/hooks/useStories';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
@@ -66,51 +66,68 @@ const StoryPage = () => {
   }
   if (!target) return null;
 
+  // Track viewport for conditional rendering (avoid double-mount viewers)
+  const [isMdUp, setIsMdUp] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && 'matchMedia' in window) {
+      return window.matchMedia('(min-width: 768px)').matches;
+    }
+    return false;
+  });
+  useEffect(() => {
+    if (!(typeof window !== 'undefined' && 'matchMedia' in window)) return;
+    const mql = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setIsMdUp(mql.matches);
+    // modern
+    try { mql.addEventListener('change', onChange); } catch { mql.addListener(onChange); }
+    onChange();
+    return () => { try { mql.removeEventListener('change', onChange); } catch { mql.removeListener(onChange); } };
+  }, []);
+
   // Non-geo: center viewer + description on desktop; keep full-screen viewer on mobile
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      {/* Mobile/vertical: fullscreen viewer with sliding metadata */}
-      <div className="md:hidden">
+      {isMdUp ? (
+        // Desktop/landscape: centered 2-column layout (viewer + description)
+        <div className="grid w-full h-full bg-white" style={{ gridTemplateColumns: '1fr 56.25vh minmax(0,56.25vh) 1fr' }}>
+          <div />
+          <div className="flex items-center justify-center" style={{ height: '100vh' }}>
+            <div style={{ width: '56.25vh', height: '100vh' }}>
+              <TwoPanelStoryViewer
+                initialStoryId={target.id}
+                initialPanelId={initialPanelId}
+                stories={stories}
+                onClose={() => navigate('/gallery')}
+                hideRightPanel
+                hideMetadataPanel
+              />
+            </div>
+          </div>
+          <div className="bg-white relative">
+            <button
+              onClick={() => navigate('/gallery')}
+              className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center"
+              aria-label="Fermer"
+            >
+              <X size={22} />
+            </button>
+            <div className="h-full">
+              <StoryMetadata
+                story={target}
+                currentPanel={target.panels[0]}
+              />
+            </div>
+          </div>
+          <div />
+        </div>
+      ) : (
+        // Mobile/vertical: fullscreen viewer with sliding metadata
         <TwoPanelStoryViewer
           initialStoryId={target.id}
           initialPanelId={initialPanelId}
           stories={stories}
           onClose={() => navigate('/gallery')}
         />
-      </div>
-
-      {/* Desktop/landscape: centered 2-column layout (viewer + description), right panel can shrink */}
-      <div className="hidden md:grid w-full h-full bg-white" style={{ gridTemplateColumns: '1fr 56.25vh minmax(0,56.25vh) 1fr' }}>
-        <div />
-        <div className="flex items-center justify-center" style={{ height: '100vh' }}>
-          <div style={{ width: '56.25vh', height: '100vh' }}>
-            <TwoPanelStoryViewer
-              initialStoryId={target.id}
-              initialPanelId={initialPanelId}
-              stories={stories}
-              onClose={() => navigate('/gallery')}
-              hideRightPanel
-              hideMetadataPanel
-            />
-          </div>
-        </div>
-        <div className="bg-white relative">
-          <button
-            onClick={() => navigate('/gallery')}
-            className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center"
-            aria-label="Fermer"
-          >
-            <X size={22} />
-          </button>
-          <div className="h-full">
-            <StoryMetadata
-              story={target}
-              currentPanel={target.panels[0]}
-            />
-          </div>
-        </div>
-        <div />
-      </div>
+      )}
     </div>
   );
 };

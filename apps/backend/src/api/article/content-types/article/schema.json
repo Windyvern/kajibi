@@ -32,6 +32,14 @@
         "videos"
       ]
     },
+    "avatar": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": [
+        "images"
+      ]
+    },
     "author": {
       "type": "relation",
       "relation": "manyToOne",
@@ -129,6 +137,18 @@
     },
     "last_visit": {
       "type": "date"
+    },
+    "posts": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::post.post",
+      "mappedBy": "articles"
+    },
+    "reels": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::reel.reel",
+      "mappedBy": "articles"
     }
   }
 }

@@ -51,7 +51,17 @@ export default ({ env }) => {
         },
       },
     },
-    'strapi::session',
+    {
+      name: 'strapi::session',
+      config: {
+        cookie: {
+          // For local HTTP (no TLS), set to false to avoid browsers dropping the cookie
+          secure: env.bool('SESSION_COOKIE_SECURE', false),
+          // Lax avoids third-party issues while remaining permissive for same-site navigation
+          sameSite: env('SESSION_COOKIE_SAMESITE', 'lax'),
+        },
+      },
+    },
     'strapi::favicon',
     'strapi::public',
   ];
