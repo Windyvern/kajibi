@@ -16,6 +16,7 @@ interface ProgressBarProps {
 
 export const ProgressBar = ({ totalPanels, currentPanel, currentProgress = 0, storyTitle, author, uploaderName, dateText, avatarUrl, onClose }: ProgressBarProps) => {
   const name = uploaderName || author;
+  const initial = (name || '').replace(/^@/, '').trim().charAt(0).toUpperCase() || '?';
   const dateLabel = dateText || new Date().toLocaleDateString();
   return (
     <div className="w-full">
@@ -44,7 +45,7 @@ export const ProgressBar = ({ totalPanels, currentPanel, currentProgress = 0, st
             <img src={avatarUrl} alt={name} className="w-8 h-8 rounded-full object-cover" />
           ) : (
             <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-xs font-bold">
-              {name.charAt(0)}
+              {initial}
             </div>
           )}
           <div>

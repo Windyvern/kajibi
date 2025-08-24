@@ -458,11 +458,13 @@ export default {
 };
 
 async function instagramImportFromZip(strapi: any, file: any) {
+  let tmpBase: string | null = null;
   try {
     const zipUrl = file.url as string;
     const publicDir = (strapi.dirs && (strapi.dirs as any).public) || path.join(process.cwd(), 'public');
     const absPath = path.join(publicDir, zipUrl.startsWith('/') ? zipUrl.slice(1) : zipUrl);
-    const tmpBase = path.join('/tmp', `igimport-${file.id}-${Date.now()}`);
+    const TMP_ROOT = process.env.IG_IMPORT_TMPDIR || '/tmp';
+    tmpBase = path.join(TMP_ROOT, `igimport-${file.id}-${Date.now()}`);
     await fs.promises.mkdir(tmpBase, { recursive: true });
     const { execFile } = await import('node:child_process');
     const { promisify } = await import('node:util');
@@ -490,13 +492,24 @@ async function instagramImportFromZip(strapi: any, file: any) {
       if (!jsonPath) { try { strapi.log.debug(`[ig-import] json not found for ${key}`); } catch {} continue; }
       await processCategory(strapi, { key, json: jsonPath, folderName: key.charAt(0).toUpperCase() + key.slice(1) }, defaultUser);
     }
-  } catch {}
+  } catch {
+    // ignore
+  } finally {
+    if (tmpBase) {
+      try { await fs.promises.rm(tmpBase, { recursive: true, force: true }); } catch {}
+    }
+  }
 }
 
 function extractMentions(title: string | undefined): string[] {
   if (!title) return [];
-  const words = title.split(/\s+/);
-  return words.filter(w => /^@[\w.]+$/.test(w));
+  const out = new Set<string>();
+  const re = /@([A-Za-z0-9_](?:[A-Za-z0-9_.]*[A-Za-z0-9_])?)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(title))) {
+    out.add('@' + (m[1] || ''));
+  }
+  return Array.from(out);
 }
 
 async function ensureFolder(strapi: any, name: string) {
@@ -628,7 +641,7 @@ async function processCategory(strapi: any, cat: any, usernameFromZip: string) {
                   username: uname,
                   title: uname,
                   slug: uname.replace(/^@/, ''),
-                  description: truncate(title || '', 80),
+                description: title || '',
                   cover: createdFile?.id ? { connect: [createdFile.id] } : undefined,
                   publishedAt: new Date().toISOString(),
                 },

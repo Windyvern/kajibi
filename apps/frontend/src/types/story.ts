@@ -26,6 +26,7 @@ export interface Story {
   thumbnailPanelId?: string; // Which panel to use as map marker
   rating?: number;
   username?: string;
+  avatarUrl?: string;
   tags?: string[];
   address?: string;
   description?: string;

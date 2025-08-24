@@ -46,6 +46,29 @@ export const StoryGalleryOverlay = ({
                 alt={panel.title || `Panel ${index + 1}`}
                 className="w-full h-full object-cover"
               />
+            ) : panel.type === 'video' && panel.media ? (
+              <div className="w-full h-full relative">
+                <video
+                  src={panel.media}
+                  className="w-full h-full object-cover"
+                  preload="metadata"
+                  muted
+                  playsInline
+                  autoPlay={false}
+                  controls={false}
+                  onPlay={(e) => { try { e.currentTarget.pause(); } catch {} }}
+                  onLoadedMetadata={(e) => {
+                    // Try to display first frame
+                    const v = e.currentTarget;
+                    try { v.currentTime = 0.01; } catch {}
+                    try { v.pause(); } catch {}
+                  }}
+                />
+                {/* Play overlay icon */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <img src="/icons/play.svg" alt="Play" className="w-12 h-12 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]" />
+                </div>
+              </div>
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
                 <div className="text-center p-2">
@@ -56,10 +79,7 @@ export const StoryGalleryOverlay = ({
               </div>
             )}
             
-            {/* Panel Number */}
-            <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
-              {index + 1}
-            </div>
+            {/* Number indicator removed as requested */}
             
             {/* Current Indicator */}
             {index === currentPanelIndex && (

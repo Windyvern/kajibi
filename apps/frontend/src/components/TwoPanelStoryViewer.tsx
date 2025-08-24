@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Grid3X3, X, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Grid3X3, X, ChevronDown, ChevronUp, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { StoryPanel } from "./StoryPanel";
 import { ProgressBar } from "./ProgressBar";
 import { StoryGalleryOverlay } from "./StoryGalleryOverlay";
@@ -35,7 +35,15 @@ export const TwoPanelStoryViewer = ({
     return 0;
   });
   const [currentPanelIndex, setCurrentPanelIndex] = useState(0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  // Persistent and hold-to-pause controls; effective play state derives from these
+  const [pausedPersistent, setPausedPersistent] = useState(false);
+  const [holdPaused, setHoldPaused] = useState(false);
+  // Mute UI state kept in parent so button aligns consistently; StoryPanel enforces actual mute
+  const readInitialMuted = () => {
+    try { const v = sessionStorage.getItem('storyViewer:muted'); return v === 'false' ? false : true; } catch { return true; }
+  };
+  const [mutedUI, setMutedUI] = useState<boolean>(readInitialMuted());
+  const [muteToggleTick, setMuteToggleTick] = useState(0);
   const [panelProgress, setPanelProgress] = useState(0); // 0..1
   const [panelDuration, setPanelDuration] = useState<number>(5);
   const [showGallery, setShowGallery] = useState(false);
@@ -187,12 +195,13 @@ export const TwoPanelStoryViewer = ({
   // Smooth progress for non-video panels using delta timer that pauses/resumes without resetting
   useEffect(() => {
     const isVideo = currentPanel?.type === 'video';
+    const effectivePlaying = !(pausedPersistent || holdPaused);
     // Cleanup any existing timer first
     if (nonVideoTimerRef.current) {
       clearInterval(nonVideoTimerRef.current);
       nonVideoTimerRef.current = null;
     }
-    if (!isAutoPlaying || showGallery || isVideo) return;
+    if (!effectivePlaying || showGallery || isVideo) return;
     const totalMs = Math.max(0.5, panelDuration) * 1000;
     nonVideoLastTickRef.current = null; // restart delta tracking
     nonVideoTimerRef.current = setInterval(() => {
@@ -220,7 +229,12 @@ export const TwoPanelStoryViewer = ({
         nonVideoTimerRef.current = null;
       }
     };
-  }, [currentPanelIndex, currentStoryIndex, currentPanel?.type, isAutoPlaying, showGallery, panelDuration]);
+  }, [currentPanelIndex, currentStoryIndex, currentPanel?.type, pausedPersistent, holdPaused, showGallery, panelDuration]);
+
+  // Keep UI mute state in sync with session pref on panel change
+  useEffect(() => {
+    setMutedUI(readInitialMuted());
+  }, [currentPanelIndex]);
 
   // Mobile swipe gesture support
   const mobileSwipeHandlers = useSwipeGestures({
@@ -272,6 +286,11 @@ export const TwoPanelStoryViewer = ({
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
+      if (e.key === ' ') {
+        e.preventDefault();
+        setPausedPersistent((p) => !p);
+        return;
+      }
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         goToNextPanel();
@@ -286,10 +305,17 @@ export const TwoPanelStoryViewer = ({
 
   // Calculate responsive panel visibility based on window aspect ratio
   const [windowAspectRatio, setWindowAspectRatio] = useState(window.innerWidth / window.innerHeight);
+  const [isMdUp, setIsMdUp] = useState(() => {
+    if (typeof window !== 'undefined' && 'matchMedia' in window) {
+      return window.matchMedia('(min-width: 768px)').matches;
+    }
+    return false;
+  });
   
   useEffect(() => {
     const updateAspectRatio = () => {
       setWindowAspectRatio(window.innerWidth / window.innerHeight);
+      try { setIsMdUp(window.matchMedia('(min-width: 768px)').matches); } catch {}
     };
     
     window.addEventListener('resize', updateAspectRatio);
@@ -331,23 +357,199 @@ export const TwoPanelStoryViewer = ({
     );
   }
 
-  return (
-    <div className="min-h-screen bg-black">
-      {/* Helper to extract date from current media filename */}
-      {(() => { /* placeholder to keep JSX type */ })()}
-      {/* computeMediaDate returns a localized date string from media filename, else undefined */}
-      {null}
-      {/* Mobile Layout - Single Panel with sliding metadata */}
-      <div className="md:hidden">
-        <div 
-          className="relative min-h-screen overflow-hidden"
-          {...mobileSwipeHandlers}
-          onWheel={(e) => {
-            if (e.deltaY < -30 && !showMetadataPanel) setShowMetadataPanel(true);
-            if (e.deltaY > 30 && showMetadataPanel) setShowMetadataPanel(false);
-          }}
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Pause any stray videos when switching panels/layout or opening gallery
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const nodes = Array.from(el.querySelectorAll('video')) as HTMLVideoElement[];
+    for (const v of nodes) {
+      // If gallery is open, pause everything. Otherwise pause all except the main video.
+      const isMain = v.getAttribute('data-role') === 'main-video';
+      if (showGallery || !isMain) {
+        try { v.pause(); } catch {}
+        // Ensure muted to avoid any audio glitch
+        try { v.muted = true; } catch {}
+      }
+    }
+  }, [currentPanelIndex, isMdUp, showGallery]);
+
+  const isControlTarget = (evt: React.SyntheticEvent | MouseEvent | TouchEvent) => {
+    const t = (evt.target as HTMLElement) || null;
+    return !!(t && t.closest('[data-ui-control="true"]'));
+  };
+
+  const withinPlayPauseZone = (evt: React.MouseEvent | React.TouchEvent, el: HTMLElement | null) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const clientX = 'touches' in evt && evt.touches[0] ? evt.touches[0].clientX : (evt as React.MouseEvent).clientX;
+    const clientY = 'touches' in evt && evt.touches[0] ? evt.touches[0].clientY : (evt as React.MouseEvent).clientY;
+    const x = (clientX - rect.left) / rect.width;
+    const y = (clientY - rect.top) / rect.height;
+    // Central zone (adjust if needed to match ForCodex/limits.png)
+    const X0 = 0.20, X1 = 0.80; // 20% .. 80% width
+    const Y0 = 0.15, Y1 = 0.85; // 15% .. 85% height
+    return x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
+  };
+
+  const mobileLayout = (
+    <div 
+      className="relative min-h-screen overflow-hidden"
+      ref={containerRef}
+      {...mobileSwipeHandlers}
+      onWheel={(e) => {
+        // Allow opening with either direction to match user expectation
+        if (!showMetadataPanel && (e.deltaY < -30 || e.deltaY > 60)) setShowMetadataPanel(true);
+        if (showMetadataPanel && e.deltaY > 30) setShowMetadataPanel(false);
+      }}
+    >
+      <div className="absolute top-0 left-0 right-0 z-20 p-4">
+        <ProgressBar
+          totalPanels={currentStory.panels.length}
+          currentPanel={currentPanelIndex}
+          currentProgress={panelProgress}
+          storyTitle={currentStory.title}
+          author={currentStory.author}
+          uploaderName={currentStory.username}
+          dateText={(() => {
+            const media = currentPanel?.media || '';
+            const file = media.split('?')[0].split('#')[0].split('/').pop() || media;
+            const m = file.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+            if (m) {
+              const iso = `${m[1]}-${m[2]}-${m[3]}`;
+              const d = new Date(iso);
+              if (!isNaN(d.getTime())) return d.toLocaleDateString();
+            }
+            return undefined;
+          })()}
+          avatarUrl={currentStory.avatarUrl}
+          onClose={onClose}
+        />
+      </div>
+
+      <button
+        onClick={() => setShowGallery(true)}
+        className="absolute top-20 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+        data-ui-control="true"
+      >
+        <Grid3X3 size={20} />
+      </button>
+
+      {/* Pause/Play toggle under gallery button */}
+      <button
+        onClick={() => setPausedPersistent((p) => !p)}
+        className="absolute top-32 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+        aria-label={(pausedPersistent || holdPaused) ? 'Play' : 'Pause'}
+        data-ui-control="true"
+      >
+        {(pausedPersistent || holdPaused) ? <Play size={20} /> : <Pause size={20} />}
+      </button>
+
+      {/* Mute/Unmute aligned with controls, only for videos */}
+      {currentPanel?.type === 'video' && (
+        <button
+          onClick={() => { setMutedUI((m) => !m); setMuteToggleTick((t) => t + 1); }}
+          className="absolute top-44 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+          aria-label={mutedUI ? 'Unmute' : 'Mute'}
+          data-ui-control="true"
         >
-          {/* Progress Bar */}
+          {mutedUI ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
+      )}
+
+      <div 
+        className="w-full h-screen cursor-pointer bg-black flex items-center justify-center"
+        onClick={handlePanelClick}
+        onMouseDown={(e) => { if (!isControlTarget(e) && withinPlayPauseZone(e, (e.currentTarget as HTMLElement))) setHoldPaused(true); }}
+        onMouseUp={() => setHoldPaused(false)}
+        onMouseLeave={() => setHoldPaused(false)}
+        onTouchStart={(e) => { if (!isControlTarget(e) && withinPlayPauseZone(e, (e.currentTarget as HTMLElement))) setHoldPaused(true); }}
+        onTouchEnd={() => setHoldPaused(false)}
+        onTouchCancel={() => setHoldPaused(false)}
+      >
+        <div style={{ width: '56.25vh', height: '100vh' }} className="flex items-center justify-center">
+          <StoryPanel 
+            panel={currentPanel}
+            paused={pausedPersistent || holdPaused}
+            externalMuteToggle={muteToggleTick}
+            onVideoMeta={(dur) => setPanelDuration(dur)}
+            onVideoTime={(t, d) => {
+              const p = Math.max(0, Math.min(1, t / d));
+              setPanelProgress(p);
+            }}
+            onVideoEnded={() => {
+              const effectivePlaying = !(pausedPersistent || holdPaused);
+              if (effectivePlaying) goToNextPanel();
+            }}
+          />
+        </div>
+
+        <button
+          onClick={(e) => { e.stopPropagation(); goToPreviousPanel(); }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 active:bg-black/60"
+          aria-label="Previous"
+          disabled={currentStoryIndex === 0 && currentPanelIndex === 0}
+          data-ui-control="true"
+        >
+          <ChevronLeft size={22} />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); goToNextPanel(); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 active:bg-black/60"
+          aria-label="Next"
+          data-ui-control="true"
+        >
+          <ChevronRight size={22} />
+        </button>
+      </div>
+
+      <div 
+        className={`absolute bottom-0 left-0 right-0 bg-white transition-transform duration-300 ease-out z-40 ${
+          showMetadataPanel ? 'transform translate-y-0' : 'transform translate-y-full'
+        }`}
+        style={{ height: '50vh' }}
+      >
+        <div className="p-4 h-full overflow-y-auto">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">Story Details</h2>
+            <button
+              onClick={() => setShowMetadataPanel(false)}
+              className="p-2 rounded-full hover:bg-gray-100"
+            >
+              <ChevronDown size={20} />
+            </button>
+          </div>
+          <StoryMetadata 
+            story={currentStory}
+            currentPanel={currentPanel}
+            onHighlightSelect={handleHighlightSelect}
+          />
+        </div>
+      </div>
+
+      {showGallery && (
+        <StoryGalleryOverlay
+          story={currentStory}
+          currentPanelIndex={currentPanelIndex}
+          onPanelSelect={jumpToPanel}
+          onClose={() => setShowGallery(false)}
+        />
+      )}
+    </div>
+  );
+
+  const desktopLayout = (
+    <div className="min-h-screen flex" ref={containerRef}>
+      <div 
+        className="flex justify-center items-center bg-black flex-shrink-0"
+        style={{ width: '56.25vh', height: '100vh' }}
+      >
+        <div 
+          className="relative bg-black w-full h-full"
+          style={{ width: '100%', height: '100%' }}
+          {...desktopSwipeHandlers}
+        >
           <div className="absolute top-0 left-0 right-0 z-20 p-4">
             <ProgressBar
               totalPanels={currentStory.panels.length}
@@ -355,14 +557,7 @@ export const TwoPanelStoryViewer = ({
               currentProgress={panelProgress}
               storyTitle={currentStory.title}
               author={currentStory.author}
-              uploaderName={(() => {
-                const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
-                for (const f of fields) {
-                  const m = f.match(/@([A-Za-z0-9._]+)/);
-                  if (m) return `@${m[1]}`;
-                }
-                return undefined;
-              })()}
+              uploaderName={currentStory.username}
               dateText={(() => {
                 const media = currentPanel?.media || '';
                 const file = media.split('?')[0].split('#')[0].split('/').pop() || media;
@@ -374,81 +569,83 @@ export const TwoPanelStoryViewer = ({
                 }
                 return undefined;
               })()}
-              avatarUrl={undefined}
+              avatarUrl={currentStory.avatarUrl}
               onClose={onClose}
             />
           </div>
 
-          {/* Gallery Button */}
           <button
             onClick={() => setShowGallery(true)}
             className="absolute top-20 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+            data-ui-control="true"
           >
             <Grid3X3 size={20} />
           </button>
 
-          {/* Story Panel with fixed 9:16 ratio centered with side letterboxing on mobile */}
-          <div 
-            className="w-full h-screen cursor-pointer bg-black flex items-center justify-center"
-            onClick={handlePanelClick}
+          {/* Pause/Play toggle under gallery button */}
+          <button
+            onClick={() => setPausedPersistent((p) => !p)}
+            className="absolute top-32 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+            aria-label={(pausedPersistent || holdPaused) ? 'Play' : 'Pause'}
+            data-ui-control="true"
           >
-            {/* Width derived from height to keep 9:16: width = 56.25vh */}
-            <div style={{ width: '56.25vh', height: '100vh' }} className="flex items-center justify-center">
-              <StoryPanel 
-                panel={currentPanel}
-                onVideoMeta={(dur) => setPanelDuration(dur)}
-                onVideoTime={(t, d) => {
-                  const p = Math.max(0, Math.min(1, t / d));
-                  setPanelProgress(p);
-                }}
-                onVideoEnded={() => { if (isAutoPlaying) goToNextPanel(); }}
-              />
-            </div>
+            {(pausedPersistent || holdPaused) ? <Play size={20} /> : <Pause size={20} />}
+          </button>
 
-            {/* Mobile Navigation Arrows */}
+          {currentPanel?.type === 'video' && (
+            <button
+              onClick={() => { setMutedUI((m) => !m); setMuteToggleTick((t) => t + 1); }}
+              className="absolute top-44 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+              aria-label={mutedUI ? 'Unmute' : 'Mute'}
+              data-ui-control="true"
+            >
+              {mutedUI ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </button>
+          )}
+
+          <div 
+            className="w-full h-screen cursor-pointer"
+            onClick={handlePanelClick}
+            onMouseDown={(e) => { if (!isControlTarget(e) && withinPlayPauseZone(e, (e.currentTarget as HTMLElement))) setHoldPaused(true); }}
+            onMouseUp={() => setHoldPaused(false)}
+            onMouseLeave={() => setHoldPaused(false)}
+            onTouchStart={(e) => { if (!isControlTarget(e) && withinPlayPauseZone(e, (e.currentTarget as HTMLElement))) setHoldPaused(true); }}
+            onTouchEnd={() => setHoldPaused(false)}
+            onTouchCancel={() => setHoldPaused(false)}
+          >
+            <StoryPanel 
+              panel={currentPanel}
+              paused={pausedPersistent || holdPaused}
+              externalMuteToggle={muteToggleTick}
+              onVideoMeta={(dur) => setPanelDuration(dur)}
+              onVideoTime={(t, d) => {
+                const p = Math.max(0, Math.min(1, t / d));
+                setPanelProgress(p);
+              }}
+              onVideoEnded={() => {
+                const effectivePlaying = !(pausedPersistent || holdPaused);
+                if (effectivePlaying) goToNextPanel();
+              }}
+            />
+          </div>
+
             <button
               onClick={(e) => { e.stopPropagation(); goToPreviousPanel(); }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 active:bg-black/60"
-              aria-label="Previous"
+              className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-all duration-200"
               disabled={currentStoryIndex === 0 && currentPanelIndex === 0}
+              data-ui-control="true"
             >
-              <ChevronLeft size={22} />
+              <ChevronLeft size={24} />
             </button>
+            
             <button
               onClick={(e) => { e.stopPropagation(); goToNextPanel(); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/30 text-white hover:bg-black/50 active:bg-black/60"
-              aria-label="Next"
+              className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-all duration-200"
+              data-ui-control="true"
             >
-              <ChevronRight size={22} />
+              <ChevronRight size={24} />
             </button>
-          </div>
 
-          {/* Sliding Metadata Panel */}
-          <div 
-            className={`absolute bottom-0 left-0 right-0 bg-white transition-transform duration-300 ease-out z-40 ${
-              showMetadataPanel ? 'transform translate-y-0' : 'transform translate-y-full'
-            }`}
-            style={{ height: '50vh' }}
-          >
-            <div className="p-4 h-full overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Story Details</h2>
-                <button
-                  onClick={() => setShowMetadataPanel(false)}
-                  className="p-2 rounded-full hover:bg-gray-100"
-                >
-                  <ChevronDown size={20} />
-                </button>
-              </div>
-              <StoryMetadata 
-                story={currentStory}
-                currentPanel={currentPanel}
-                onHighlightSelect={handleHighlightSelect}
-              />
-            </div>
-          </div>
-
-          {/* Story Gallery Overlay */}
           {showGallery && (
             <StoryGalleryOverlay
               story={currentStory}
@@ -460,164 +657,61 @@ export const TwoPanelStoryViewer = ({
         </div>
       </div>
 
-      {/* Desktop Layout - Responsive Panels */}
-      <div className="hidden md:flex min-h-screen">
-        {/* Story Viewer Panel - Always 9:16 aspect ratio */}
-        <div 
-          className="flex justify-center items-center bg-black flex-shrink-0"
-          style={{ 
-            // Fix width to 56.25vh (9:16 based on viewport height) regardless of window width
-            width: '56.25vh',
-            height: '100vh'
-          }}
-        >
-          <div 
-            className="relative bg-black w-full h-full"
-            style={{ 
-              width: '100%',
-              height: '100%'
-            }}
-            {...desktopSwipeHandlers}
+      {shouldShowMetadataPanel && (
+        <div className="bg-white relative flex-1 max-w-md">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-200"
+            >
+              <X size={20} />
+            </button>
+          )}
+          
+          <StoryMetadata 
+            story={currentStory}
+            currentPanel={currentPanel}
+            onHighlightSelect={handleHighlightSelect}
+          />
+        </div>
+      )}
+
+      {shouldShowRightPanel && !isRightPanelCollapsed && (
+        <div className="bg-white relative flex-1 max-w-md border-l">
+          <button
+            onClick={() => setIsRightPanelCollapsed(true)}
+            className="absolute top-4 left-4 z-10 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-200"
           >
-            {/* Progress Bar */}
-            <div className="absolute top-0 left-0 right-0 z-20 p-4">
-              <ProgressBar
-                totalPanels={currentStory.panels.length}
-                currentPanel={currentPanelIndex}
-                currentProgress={panelProgress}
-                storyTitle={currentStory.title}
-                author={currentStory.author}
-                uploaderName={(() => {
-                  const fields = [currentPanel?.title, currentPanel?.caption, currentPanel?.altText].filter(Boolean) as string[];
-                  for (const f of fields) {
-                    const m = f.match(/@([A-Za-z0-9._]+)/);
-                    if (m) return `@${m[1]}`;
-                  }
-                  return undefined;
-                })()}
-                dateText={(() => {
-                  const media = currentPanel?.media || '';
-                  const file = media.split('?')[0].split('#')[0].split('/').pop() || media;
-                  const m = file.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
-                  if (m) {
-                    const iso = `${m[1]}-${m[2]}-${m[3]}`;
-                    const d = new Date(iso);
-                    if (!isNaN(d.getTime())) return d.toLocaleDateString();
-                  }
-                  return undefined;
-                })()}
-                avatarUrl={undefined}
-                onClose={onClose}
-              />
-            </div>
+            <ChevronLeft size={20} />
+          </button>
 
-            {/* Gallery Button */}
-            <button
-              onClick={() => setShowGallery(true)}
-              className="absolute top-20 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
-            >
-              <Grid3X3 size={20} />
-            </button>
-
-            {/* Story Panel */}
-            <div 
-              className="w-full h-screen cursor-pointer"
-              onClick={handlePanelClick}
-            >
-              <StoryPanel 
-                panel={currentPanel}
-                onVideoMeta={(dur) => setPanelDuration(dur)}
-                onVideoTime={(t, d) => {
-                  const p = Math.max(0, Math.min(1, t / d));
-                  setPanelProgress(p);
-                }}
-                onVideoEnded={() => { if (isAutoPlaying) goToNextPanel(); }}
-              />
-            </div>
-
-            {/* Navigation Arrows */}
-            <button
-              onClick={(e) => { e.stopPropagation(); goToPreviousPanel(); }}
-              className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-all duration-200"
-              disabled={currentStoryIndex === 0 && currentPanelIndex === 0}
-            >
-              <ChevronLeft size={24} />
-            </button>
-            
-            <button
-              onClick={(e) => { e.stopPropagation(); goToNextPanel(); }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-all duration-200"
-            >
-              <ChevronRight size={24} />
-            </button>
-
-            {/* Story Gallery Overlay */}
-            {showGallery && (
-              <StoryGalleryOverlay
-                story={currentStory}
-                currentPanelIndex={currentPanelIndex}
-                onPanelSelect={jumpToPanel}
-                onClose={() => setShowGallery(false)}
-              />
+          <div className="h-full p-6 pt-16">
+            {rightPanelContent || (
+              <div className="text-center">
+                <h3 className="text-xl font-semibold text-gray-700 mb-4">Related Places</h3>
+                <p className="text-gray-600">Content can be customized here</p>
+              </div>
             )}
           </div>
         </div>
+      )}
 
-        {/* Metadata Panel - Hide if window too narrow */}
-        {shouldShowMetadataPanel && (
-          <div className="bg-white relative flex-1 max-w-md">
-            {/* Close Button */}
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-200"
-              >
-                <X size={20} />
-              </button>
-            )}
-            
-            <StoryMetadata 
-              story={currentStory}
-              currentPanel={currentPanel}
-              onHighlightSelect={handleHighlightSelect}
-            />
-          </div>
-        )}
+      {shouldShowRightPanel && isRightPanelCollapsed && (
+        <div className="absolute top-4 right-4 z-20">
+          <button
+            onClick={() => setIsRightPanelCollapsed(false)}
+            className="p-2 rounded-full bg-white shadow-lg hover:bg-gray-50 transition-all duration-200"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
-        {/* Right Panel - Show only if window is wide enough */}
-        {shouldShowRightPanel && !isRightPanelCollapsed && (
-          <div className="bg-white relative flex-1 max-w-md border-l">
-            {/* Collapse Button */}
-            <button
-              onClick={() => setIsRightPanelCollapsed(true)}
-              className="absolute top-4 left-4 z-10 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-200"
-            >
-              <ChevronLeft size={20} />
-            </button>
-
-            <div className="h-full p-6 pt-16">
-              {rightPanelContent || (
-                <div className="text-center">
-                  <h3 className="text-xl font-semibold text-gray-700 mb-4">Related Places</h3>
-                  <p className="text-gray-600">Content can be customized here</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Reopen Button for Right Panel */}
-        {shouldShowRightPanel && isRightPanelCollapsed && (
-          <div className="absolute top-4 right-4 z-20">
-            <button
-              onClick={() => setIsRightPanelCollapsed(false)}
-              className="p-2 rounded-full bg-white shadow-lg hover:bg-gray-50 transition-all duration-200"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-        )}
-      </div>
+  return (
+    <div className="min-h-screen bg-black">
+      {isMdUp ? desktopLayout : mobileLayout}
     </div>
   );
 };

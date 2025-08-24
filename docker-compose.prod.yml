@@ -1,0 +1,49 @@
+services:
+  # Do not expose Strapi directly in production
+  api:
+    ports: []
+    command: start
+    volumes:
+      # Persist temp extraction dir on host for large Instagram imports
+      - ./data/ig-tmp:/ig-tmp
+    environment:
+      # Allow Strapi CORS to accept the public origin served by nginx
+      FRONTEND_URL: http://localhost
+      # Ensure production serves the built admin (disable watch mode)
+      STRAPI_ADMIN_WATCH: "false"
+      # Allow very large multipart uploads (per-file). Set high to avoid Formidable cap during multi-zip uploads.
+      # 50 GiB = 53687091200
+      UPLOAD_MAX_FILESIZE: 53687091200
+      # Use container /tmp for imports (fallback for permissions issues)
+      IG_IMPORT_TMPDIR: /tmp
+
+  # Do not expose the proxy directly; only nginx is public
+  proxy:
+    ports: []
+    volumes: []
+
+  # Frontend is only reachable through nginx
+  web:
+    ports: []
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: /
+        VITE_STRAPI_URL: /
+    volumes: []
+
+  # Public entrypoint
+  nginx:
+    build: ./apps/nginx
+    depends_on:
+      - web
+      - api
+      - proxy
+    ports:
+      - "80:80"
+    volumes:
+      # Mount your real htpasswd file here (generate with: htpasswd -nb <user> <pass>)
+      - ./apps/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+
+## Using a host bind mount for /ig-tmp; no named volumes needed here.

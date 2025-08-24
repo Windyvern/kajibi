@@ -264,9 +264,9 @@ const MapView = () => {
           </div>
         </div>
       )}
-      {/* Mobile Layout */}
-      <div className="md:hidden">
-        {selectedStory ? (
+      {/* Mobile Layout (rendered conditionally to avoid double-mount) */}
+      {viewport.w < 768 && (
+        selectedStory ? (
           <div className="relative min-h-screen">
             <TwoPanelStoryViewer 
               initialStoryId={selectedStory.id}
@@ -319,11 +319,12 @@ const MapView = () => {
               </div>
             )}
           </div>
-        )}
-      </div>
+        )
+      )}
 
-      {/* Desktop Layout - Aspect-driven */}
-      <div className="hidden md:flex h-screen w-full">
+      {/* Desktop Layout - Aspect-driven (rendered conditionally) */}
+      {viewport.w >= 768 && (
+      <div className="flex h-screen w-full">
         {(viewport.w / viewport.h >= 1.4) ? (
           // Wide screens
           selectedStory ? (
@@ -512,6 +513,7 @@ const MapView = () => {
           )
         )}
       </div>
+      )}
     </div>
   );
 };

@@ -130,6 +130,7 @@ function mapArticleToStory(article: any): Story {
     thumbnailPanelId: imagePanel?.id,
     rating: attrs.rating != null ? Number(attrs.rating) : undefined,
     username: attrs.username || undefined,
+    avatarUrl: getMediaUrl(attrs.avatar),
     tags: undefined,
     address: attrs.address || undefined,
     description: attrs.description,

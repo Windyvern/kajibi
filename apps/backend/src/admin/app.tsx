@@ -482,52 +482,204 @@ export default {
           Component: async () => {
             const React = await import('react');
             const Page = () => {
-              const [file, setFile] = React.useState<File | null>(null);
-              const [status, setStatus] = React.useState<string>('');
-              const onSubmit = async (e: any) => {
-                e.preventDefault();
-                if (!file) return;
-                try {
-                  const form = new FormData();
-                  // Append under common field names so backend receives one
-                  form.append('file', file, file.name);
-                  form.append('files', file, file.name);
-                  setStatus('Uploading zip…');
-                  // Try to read admin token from various known places
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  const w: any = typeof window !== 'undefined' ? window : {};
-                  let token = '';
-                  try { token = w.strapi?.admin?.auth?.getToken?.() || ''; } catch {}
-                  if (!token) {
-                    try { token = w.strapi?.token?.getToken?.() || ''; } catch {}
-                  }
-                  if (!token && w.localStorage) {
-                    token = localStorage.getItem('jwtToken') || localStorage.getItem('token') || localStorage.getItem('strapi_jwt') || '';
-                  }
-                  const res = await fetch('/api/instagram-import', {
-                    method: 'POST',
-                    body: form,
-                    credentials: 'include',
-                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                  });
-                  if (!res.ok) {
-                    let msg = `HTTP ${res.status}`;
-                    try { msg += ' ' + (await res.text()); } catch {}
-                    throw new Error(msg);
-                  }
-                  setStatus('Uploaded. Import will start automatically.');
-                } catch (err: any) {
-                  setStatus('Upload failed: ' + (err?.message || 'unknown'));
+              const [fileLabel, setFileLabel] = React.useState<string>('');
+              const [progress, setProgress] = React.useState<number>(0);
+              const [phase, setPhase] = React.useState<'idle'|'upload'|'processing'|'done'|'error'>('idle');
+              const [message, setMessage] = React.useState<string>('');
+              const [messages, setMessages] = React.useState<Array<{ t: number; text: string }>>([]);
+              const [summary, setSummary] = React.useState<string>('');
+              const [jobId, setJobId] = React.useState<string>('');
+              const pollRef = React.useRef<any>(null);
+              const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+              const STRAPI_BLUE = '#4945FF';
+
+              const pickToken = (): string => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const w: any = typeof window !== 'undefined' ? window : {};
+                let token = '';
+                try { token = w.strapi?.admin?.auth?.getToken?.() || ''; } catch {}
+                if (!token) {
+                  try { token = w.strapi?.token?.getToken?.() || ''; } catch {}
                 }
+                if (!token && w.localStorage) {
+                  token = localStorage.getItem('jwtToken') || localStorage.getItem('token') || localStorage.getItem('strapi_jwt') || '';
+                }
+                return token || '';
               };
-              return React.createElement('div', { style: { padding: 24 } },
-                React.createElement('h2', null, 'Instagram Import'),
-                React.createElement('p', null, 'Upload your Instagram archive .zip. The server will process posts, stories, and reels.'),
-                React.createElement('form', { onSubmit },
-                  React.createElement('input', { type: 'file', accept: '.zip', onChange: (e: any) => setFile(e.target.files?.[0] || null) }),
-                  React.createElement('button', { type: 'submit', style: { marginLeft: 12 } }, 'Upload zip')
-                ),
-                React.createElement('p', { style: { marginTop: 12 } }, status)
+
+              const startProcessingTicker = React.useCallback(() => {
+                // From 10% to 95% while waiting for server processing
+                setPhase('processing');
+                setMessage('Préparation… vous pouvez quitter la page.');
+                let current = 10;
+                setProgress((p) => { current = Math.max(p, 10); return current; });
+                const id = setInterval(() => {
+                  current = Math.min(current + 1, 95);
+                  setProgress(current);
+                  if (current >= 95) clearInterval(id);
+                }, 2000);
+                return () => clearInterval(id);
+              }, []);
+
+              const handleFilesSelected = (list: FileList | File[] | null) => {
+                const arr = list ? Array.from(list as any) as File[] : [];
+                if (!arr.length) return;
+                setFileLabel(arr.length === 1 ? arr[0].name : `${arr.length} fichiers sélectionnés`);
+                setPhase('upload');
+                setMessage('Téléchargement… veuillez ne pas quitter la page.');
+                setProgress(0);
+
+                const form = new FormData();
+                for (const f of arr) {
+                  form.append('files', f, f.name);
+                }
+                const token = pickToken();
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/instagram-import');
+                if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.withCredentials = true;
+
+                xhr.upload.onprogress = (ev) => {
+                  if (!ev.lengthComputable) return;
+                  const frac = ev.loaded / Math.max(1, ev.total);
+                  const pct = Math.floor(frac * 10); // 0–10%
+                  setProgress(pct);
+                };
+
+                // When the upload fully finishes, switch UI to processing immediately
+                xhr.upload.onload = () => {
+                  if (phase === 'upload') {
+                    setProgress((p) => (p < 10 ? 10 : p));
+                    // Begin simulated processing ticker up to 95%
+                    if (!stopTicker) stopTicker = startProcessingTicker();
+                  }
+                };
+
+                let stopTicker: any = null;
+                xhr.onreadystatechange = () => {
+                  // Backup: if headers are received before onload fires, start ticker
+                  if (xhr.readyState === 2 && phase === 'upload') {
+                    if (!stopTicker) stopTicker = startProcessingTicker();
+                  }
+                };
+
+                xhr.onload = () => {
+                  if (stopTicker) try { stopTicker(); } catch {}
+                  const text = xhr.responseText || '';
+                  let json: any = null;
+                  try { json = JSON.parse(text); } catch {}
+                  if (xhr.status >= 200 && xhr.status < 300 && json?.ok) {
+                    // If job-based, start polling progress
+                    if (json?.jobId) {
+                      const id = String(json.jobId);
+                      setJobId(id);
+                      setPhase('processing');
+                      setMessage('Préparation… vous pouvez quitter la page.');
+                      const poll = async () => {
+                        try {
+                          const res = await fetch(`/api/instagram-import/status?job=${encodeURIComponent(id)}`, { credentials: 'include' });
+                          const st = await res.json();
+                          if (st?.percent != null) setProgress(Math.max(10, Math.min(100, Number(st.percent))));
+                          const msgs = Array.isArray(st?.messages) ? st.messages : [];
+                          if (msgs.length) {
+                            setMessages(msgs);
+                            setMessage(String(msgs[msgs.length - 1]?.text || ''));
+                          }
+                          else if (st?.stage) setMessage(String(st.stage));
+                          if (st?.done) {
+                            // Build final summary
+                            const by = st?.stats?.byCategory || {};
+                            const nPosts = (by.posts?.uploaded || 0);
+                            const nReels = (by.reels?.uploaded || 0);
+                            const nStories = (by.stories?.uploaded || 0);
+                            const created = st?.stats?.articlesCreated || 0;
+                            const updated = st?.stats?.articlesUpdated || 0;
+                            let sentence = `${nPosts} posts, ${nReels} reels et ${nStories} stories ajoutés`;
+                            if (created && !updated) sentence += `, ${created} articles créés !`;
+                            else if (!created && updated) sentence += `, ${updated} articles mis à jour !`;
+                            else if (created && updated) sentence += `, ${created} articles créés, ${updated} articles mis à jour !`;
+                            else sentence += ' !';
+                            setSummary(sentence);
+                            setPhase('done');
+                            setProgress(100);
+                            clearInterval(pollRef.current);
+                            pollRef.current = null;
+                          }
+                        } catch {}
+                      };
+                      if (pollRef.current) clearInterval(pollRef.current);
+                      pollRef.current = setInterval(poll, 1000);
+                      poll();
+                    } else {
+                      // legacy immediate response path
+                      setPhase('done');
+                      setProgress(100);
+                      const by = json?.stats?.byCategory || {};
+                      const nPosts = (by.posts?.uploaded || 0);
+                      const nReels = (by.reels?.uploaded || 0);
+                      const nStories = (by.stories?.uploaded || 0);
+                      const created = json?.stats?.articlesCreated || 0;
+                      const updated = json?.stats?.articlesUpdated || 0;
+                      let sentence = `${nPosts} posts, ${nReels} reels et ${nStories} stories ajoutés`;
+                      if (created && !updated) sentence += `, ${created} articles créés !`;
+                      else if (!created && updated) sentence += `, ${updated} articles mis à jour !`;
+                      else if (created && updated) sentence += `, ${created} articles créés, ${updated} articles mis à jour !`;
+                      else sentence += ' !';
+                      setSummary(sentence);
+                    }
+                  } else {
+                    setPhase('error');
+                    const errText = json ? JSON.stringify(json) : (text || `HTTP ${xhr.status}`);
+                    setMessage('Échec de l\'import : ' + errText);
+                  }
+                };
+
+                xhr.onerror = () => {
+                  if (stopTicker) try { stopTicker(); } catch {}
+                  setPhase('error');
+                  setMessage('Échec de l\'import (réseau).');
+                };
+
+                xhr.send(form);
+              };
+
+              const onChooseFile = () => fileInputRef.current?.click();
+
+              return (
+                React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: 24 } },
+                  React.createElement('div', { style: { maxWidth: 900, textAlign: 'center' } },
+                    React.createElement('h1', { style: { fontSize: 36, fontWeight: 800, color: STRAPI_BLUE, marginBottom: 8 } }, 'Importeur Instagram'),
+                    React.createElement('p', { style: { fontSize: 16, color: '#666', marginBottom: 6 } }, 'Uploader ici l\'archive .zip Instagram. Le serveur va automatiquement trier le contenu et créer ou mettre à jour les articles.'),
+                    React.createElement('p', { style: { fontSize: 14, color: '#666', fontStyle: 'italic', marginBottom: 24 } }, 'Récupérez votre archive Instagram via l\'Espace Comptes Meta. Important : si le format d\'export est en HTML, sélectionnez JSON, sinon l\'import échouera.'),
+
+                    React.createElement('input', { ref: fileInputRef, type: 'file', accept: '.zip', multiple: true, style: { display: 'none' }, onChange: (e: any) => handleFilesSelected(e.target.files) }),
+                    React.createElement('button', {
+                      type: 'button', onClick: onChooseFile,
+                      style: {
+                        background: STRAPI_BLUE,
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 9999,
+                        padding: '18px 28px',
+                        fontSize: 16,
+                        cursor: 'pointer',
+                        minWidth: 280,
+                      },
+                    }, fileLabel ? fileLabel : 'Choisir un fichier'),
+
+                    (phase !== 'idle') && React.createElement('div', { style: { marginTop: 24 } },
+                      React.createElement('div', { style: { height: 10, background: '#eee', borderRadius: 9999, overflow: 'hidden' } },
+                        React.createElement('div', { style: { height: '100%', width: `${progress}%`, background: STRAPI_BLUE, transition: 'width 0.3s ease' } })
+                      ),
+                      React.createElement('div', { style: { marginTop: 8, color: '#444' } }, message),
+                      messages && messages.length > 0 && React.createElement('div', { style: { marginTop: 6, color: '#555', textAlign: 'left', maxWidth: 700, marginLeft: 'auto', marginRight: 'auto' } },
+                        messages.slice(-6).map((m, i) => React.createElement('div', { key: `${m.t}-${i}`, style: { fontSize: 12, opacity: 0.85 } }, `• ${m.text}`))
+                      ),
+                      summary && React.createElement('div', { style: { marginTop: 8, fontWeight: 600 } }, summary),
+                    ),
+                  )
+                )
               );
             };
             // @ts-ignore

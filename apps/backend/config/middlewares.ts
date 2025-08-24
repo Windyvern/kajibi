@@ -39,8 +39,29 @@ export default ({ env }) => {
     },
     'strapi::poweredBy',
     'strapi::query',
-    'strapi::body',
-    'strapi::session',
+    {
+      name: 'strapi::body',
+      config: {
+        jsonLimit: '10mb',
+        formLimit: '10mb',
+        textLimit: '10mb',
+        formidable: {
+          // Allow very large multipart uploads (e.g., 2GB Instagram archive)
+          maxFileSize: env.int('UPLOAD_MAX_FILESIZE', 2 * 1024 * 1024 * 1024),
+        },
+      },
+    },
+    {
+      name: 'strapi::session',
+      config: {
+        cookie: {
+          // For local HTTP (no TLS), set to false to avoid browsers dropping the cookie
+          secure: env.bool('SESSION_COOKIE_SECURE', false),
+          // Lax avoids third-party issues while remaining permissive for same-site navigation
+          sameSite: env('SESSION_COOKIE_SAMESITE', 'lax'),
+        },
+      },
+    },
     'strapi::favicon',
     'strapi::public',
   ];

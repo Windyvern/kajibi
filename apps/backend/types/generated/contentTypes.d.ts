@@ -412,6 +412,7 @@ export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
   attributes: {
     address: Schema.Attribute.String;
     author: Schema.Attribute.Relation<'manyToOne', 'api::author.author'>;
+    avatar: Schema.Attribute.Media<'images'>;
     blocks: Schema.Attribute.DynamicZone<
       ['shared.quote', 'shared.rich-text', 'shared.slider', 'shared.media']
     >;
@@ -437,11 +438,13 @@ export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
       'images' | 'files' | 'videos' | 'audios',
       true
     >;
+    posts: Schema.Attribute.Relation<'manyToMany', 'api::post.post'>;
     price_max: Schema.Attribute.Decimal;
     price_min: Schema.Attribute.Decimal;
     prizes: Schema.Attribute.Relation<'manyToMany', 'api::prize.prize'>;
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal;
+    reels: Schema.Attribute.Relation<'manyToMany', 'api::reel.reel'>;
     slug: Schema.Attribute.UID<'title'>;
     tags: Schema.Attribute.Relation<'manyToMany', 'api::tag.tag'>;
     title: Schema.Attribute.String;
@@ -623,6 +626,36 @@ export interface ApiMediaMetadataMediaMetadata
   };
 }
 
+export interface ApiPostPost extends Struct.CollectionTypeSchema {
+  collectionName: 'posts';
+  info: {
+    displayName: 'Post';
+    pluralName: 'posts';
+    singularName: 'post';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    articles: Schema.Attribute.Relation<'manyToMany', 'api::article.article'>;
+    caption: Schema.Attribute.Text;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::post.post'> &
+      Schema.Attribute.Private;
+    media: Schema.Attribute.Media<'images' | 'videos', true>;
+    publishedAt: Schema.Attribute.DateTime;
+    source: Schema.Attribute.String & Schema.Attribute.DefaultTo<'instagram'>;
+    source_id: Schema.Attribute.String & Schema.Attribute.Unique;
+    taken_at: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiPrizePrize extends Struct.CollectionTypeSchema {
   collectionName: 'prizes';
   info: {
@@ -644,6 +677,36 @@ export interface ApiPrizePrize extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
     slug: Schema.Attribute.UID<'name'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiReelReel extends Struct.CollectionTypeSchema {
+  collectionName: 'reels';
+  info: {
+    displayName: 'Reel';
+    pluralName: 'reels';
+    singularName: 'reel';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    articles: Schema.Attribute.Relation<'manyToMany', 'api::article.article'>;
+    caption: Schema.Attribute.Text;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::reel.reel'> &
+      Schema.Attribute.Private;
+    media: Schema.Attribute.Media<'images' | 'videos', true>;
+    publishedAt: Schema.Attribute.DateTime;
+    source: Schema.Attribute.String & Schema.Attribute.DefaultTo<'instagram'>;
+    source_id: Schema.Attribute.String & Schema.Attribute.Unique;
+    taken_at: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1220,7 +1283,9 @@ declare module '@strapi/strapi' {
       'api::global.global': ApiGlobalGlobal;
       'api::list.list': ApiListList;
       'api::media-metadata.media-metadata': ApiMediaMetadataMediaMetadata;
+      'api::post.post': ApiPostPost;
       'api::prize.prize': ApiPrizePrize;
+      'api::reel.reel': ApiReelReel;
       'api::tag.tag': ApiTagTag;
       'api::type.type': ApiTypeType;
       'plugin::content-releases.release': PluginContentReleasesRelease;

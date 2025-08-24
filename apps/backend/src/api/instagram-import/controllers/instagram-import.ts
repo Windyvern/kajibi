@@ -8,10 +8,47 @@ import mime from 'mime-types';
 const convertImagesToWebp = false;
 
 const execFileAsync = promisify(execFile);
+const TMP_ROOT = process.env.IG_IMPORT_TMPDIR || '/tmp';
+
+// Simple in-memory job registry for progress reporting
+type JobStage = 'queued' | 'unzipping' | 'processing' | 'finalizing' | 'done' | 'error';
+type Job = {
+  id: string;
+  dir: string;
+  stage: JobStage;
+  percent: number; // 0–100
+  stats: ImportStats;
+  error?: string;
+  startedAt: number;
+  updatedAt: number;
+  done: boolean;
+  messages: Array<{ t: number; text: string }>; // rolling log
+};
+const jobs: Record<string, Job> = Object.create(null);
+const newJobId = () => `job_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const now = () => Date.now();
+const setJob = (j: Job, patch: Partial<Job>) => {
+  Object.assign(j, patch);
+  j.updatedAt = now();
+};
+const pushMsg = (j: Job, text: string) => {
+  try {
+    j.messages.push({ t: now(), text });
+    // keep last 100 messages
+    if (j.messages.length > 100) j.messages.splice(0, j.messages.length - 100);
+    j.updatedAt = now();
+  } catch {}
+};
 
 const extractMentions = (title?: string): string[] => {
   if (!title) return [];
-  return title.split(/\s+/).filter((w) => /^@[\w.]+$/.test(w));
+  const out = new Set<string>();
+  const re = /@([A-Za-z0-9_](?:[A-Za-z0-9_.]*[A-Za-z0-9_])?)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(title))) {
+    out.add('@' + (m[1] || ''));
+  }
+  return Array.from(out);
 };
 
 const ensureFolder = async (strapi: any, name: string) => {
@@ -61,6 +98,18 @@ const resolveMediaPath = async (tmpBase: string, catJsonPath: string, rel: strin
   return null;
 };
 
+const resolveProfileMedia = async (tmpBase: string, rel: string): Promise<string | null> => {
+  const relNorm = rel.replace(/^\/?/, '');
+  const candidates = [
+    path.join(tmpBase, relNorm),
+    path.join(tmpBase, 'your_instagram_activity', relNorm),
+  ].map((p) => path.normalize(p));
+  for (const c of candidates) {
+    if (await fileExists(c)) return c;
+  }
+  return null;
+};
+
 const pickJsonPath = async (contentDir: string, base: string): Promise<string | null> => {
   const names = [
     `${base}.json`,
@@ -93,6 +142,57 @@ const findJsonAnywhere = async (root: string, base: string): Promise<string | nu
   return null;
 };
 
+// Heuristic discovery of Instagram JSONs regardless of filename/localization.
+// Returns an array of { key: 'posts'|'reels'|'stories', path }
+const discoverCategoryJsons = async (root: string): Promise<Array<{ key: string; path: string }>> => {
+  const results: Array<{ key: string; path: string }> = [];
+  const queue: string[] = [root];
+  const seen = new Set<string>();
+  while (queue.length) {
+    const dir = queue.shift()!;
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+    let ents: fs.Dirent[] = [];
+    try { ents = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { continue; }
+    for (const e of ents) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { queue.push(full); continue; }
+      if (!e.isFile()) continue;
+      if (!/\.json$/i.test(e.name)) continue;
+      // Skip obviously unrelated large JSONs (>25MB) to avoid heavy I/O
+      try {
+        const st = await fs.promises.stat(full);
+        if (st.size > 25 * 1024 * 1024) continue;
+      } catch { continue; }
+      // Try to parse and detect shape
+      try {
+        const txt = await fs.promises.readFile(full, 'utf8');
+        const json = JSON.parse(txt);
+        const arr: any[] = Array.isArray(json) ? json : (json && typeof json === 'object' ? (Object.values(json).find((v) => Array.isArray(v)) as any[] | undefined) : undefined) || [];
+        if (!Array.isArray(arr) || !arr.length) continue;
+        // Sample a few items to see if they look like IG media entries
+        const sample = arr.slice(0, Math.min(arr.length, 5));
+        let looksMedia = false;
+        let anyUri = '';
+        let anyTs = 0;
+        for (const it of sample) {
+          const uri = pickField(it, ['uri', 'path', 'media[0].uri', 'attachments[0].data.uri', 'media_map_data.0.uri']);
+          const ts = pickField(it, ['creation_timestamp', 'taken_at', 'media[0].creation_timestamp']);
+          if (uri && (typeof ts === 'number' || typeof ts === 'string')) { looksMedia = true; anyUri = String(uri); anyTs = Number(ts) || 0; break; }
+        }
+        if (!looksMedia) continue;
+        // Classify as posts/reels/stories by path hints
+        const hintPath = `${full} ${anyUri}`.toLowerCase();
+        const key = /reel|clips/.test(hintPath) ? 'reels' : (/storie|stories/.test(hintPath) ? 'stories' : 'posts');
+        results.push({ key, path: full });
+      } catch {}
+    }
+  }
+  // Deduplicate by file path (keep first occurrence)
+  const seenPath = new Set<string>();
+  return results.filter((r) => (seenPath.has(r.path) ? false : (seenPath.add(r.path), true)));
+};
+
 type IgItem = any;
 const pickField = (item: IgItem, keys: string[]): any => {
   for (const k of keys) {
@@ -112,7 +212,27 @@ const pickField = (item: IgItem, keys: string[]): any => {
   return undefined;
 };
 
-const processCategory = async (strapi: any, cat: any, usernameFromZip: string, touchedArticleIds: Set<number>) => {
+type ImportStats = {
+  categories: string[];
+  jsonFound: Array<{ key: string; path: string }>;
+  itemsTotal: number;
+  uploaded: number;
+  skippedMissingMedia: number;
+  uploadErrors: number;
+  byCategory: Record<string, { items: number; uploaded: number; earliestTs?: number }>;
+  articlesCreated: number;
+  articlesUpdated: number;
+  usernamesTouched: string[];
+};
+
+const processCategory = async (
+  strapi: any,
+  cat: any,
+  usernameFromZip: string,
+  touchedArticleIds: Set<number>,
+  stats: ImportStats,
+  onProgress?: (uploaded: number, total: number, msg?: string) => void,
+) => {
   const looksMojibake = (s: string) => /[ÂÃ]|â[€€™“”]/.test(s);
   const fixMojibake = (s: string) => {
     try {
@@ -139,6 +259,10 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
         : []);
   const items = itemsRaw.slice().sort((a, b) => (a?.creation_timestamp || 0) - (b?.creation_timestamp || 0));
   if (!items.length) return;
+  stats.itemsTotal += items.length;
+  const catKey = String(cat?.key || cat?.folderName || 'unknown');
+  stats.byCategory[catKey] = stats.byCategory[catKey] || { items: 0, uploaded: 0 };
+  stats.byCategory[catKey].items += items.length;
 
   try { strapi.log.info(`[ig-import] processing ${items.length} items for ${cat.folderName}`); } catch {}
   for (const item of items) {
@@ -150,6 +274,10 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
     if (!rel || !ts) { try { strapi.log.debug(`[ig-import] skip item missing rel/ts rel=${!!rel} ts=${!!ts}`); } catch {} continue; }
     const mentions = extractMentions(title);
     const visitDate = new Date(ts * 1000);
+    if (typeof ts === 'number') {
+      const prev = stats.byCategory[catKey].earliestTs;
+      stats.byCategory[catKey].earliestTs = prev == null ? ts : Math.min(prev, ts);
+    }
     const dateStr = visitDate
       .toISOString()
       .replace(/\.\d{3}Z$/, '')
@@ -160,10 +288,11 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
     const srcPath = await resolveMediaPath(tmpBase, cat.json, relNorm);
     if (!srcPath) {
       try { strapi.log.info(`[ig-import] media not found for rel=${relNorm}`); } catch {}
+      stats.skippedMissingMedia += 1;
       continue;
     }
     const ext = path.extname(srcPath).toLowerCase();
-    const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+    const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.heic'].includes(ext);
     const isVideo = ['.mp4', '.mov'].includes(ext);
     const baseName = `${usernameFromZip}_${dateStr}`;
     let targetExt = ext;
@@ -176,7 +305,7 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
     if (isImage && convertImagesToWebp) {
       try {
         const sharp = require('sharp');
-        const outPath = path.join('/tmp', `ig-${Date.now()}-${Math.random().toString(36).slice(2)}.webp`);
+        const outPath = path.join(TMP_ROOT, `ig-${Date.now()}-${Math.random().toString(36).slice(2)}.webp`);
         await sharp(srcPath).webp({ quality: 90 }).toFile(outPath);
         tmpOut = outPath;
         targetExt = '.webp';
@@ -220,6 +349,7 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
         const details = (e && (e.details || e.stack || e.message)) || e;
         try { strapi.log.error(`[ig-import] upload error: ${JSON.stringify(details)}`); } catch {}
         // Continue with next item; do not fail the whole request
+        stats.uploadErrors += 1;
         continue;
       }
       const createdFile = Array.isArray(created) ? created[0] : created;
@@ -234,13 +364,124 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
         }
       } catch {}
       try { strapi.log.info(`[ig-import] uploaded file id=${createdFile?.id} name=${createdFile?.name}`); } catch {}
-      const usernames = mentions.length ? mentions.map((m) => m) : [`@${usernameFromZip}`];
+      stats.uploaded += 1;
+      stats.byCategory[catKey].uploaded += 1;
+      if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0);
+      // Normalize mentions to lowercase for matching
+      const usernames = (mentions.length ? mentions : [`@${usernameFromZip}`]).map((u: string) => u.toLowerCase());
       const truncate = (s: string, max: number) => {
         const arr = [...(s || '')];
         return arr.length > max ? arr.slice(0, max).join('') : s;
       };
+      // Branch by category
+      const key = String(cat.key || '').toLowerCase();
+      const isStories = key === 'stories';
+      const isPosts = key === 'posts';
+      const isReels = key === 'reels';
+
+      if (isPosts || isReels) {
+        // Create or update a Post/Reel entity; do not attach media directly to Article
+        const sourceId = targetName.replace(/\.[^.]+$/, '');
+        const contentType = isPosts ? 'api::post.post' : 'api::reel.reel';
+        let entity = await strapi.entityService.findMany(contentType, { filters: { source_id: sourceId }, limit: 1 });
+        entity = (Array.isArray(entity) && entity[0]) ? entity[0] : null;
+        let createdEntity: any = null;
+        if (!entity) {
+          createdEntity = await strapi.entityService.create(contentType, {
+            data: {
+              source: 'instagram',
+              source_id: sourceId,
+              caption: title || '',
+              taken_at: visitDate.toISOString(),
+              media: createdFile?.id ? { connect: [createdFile.id] } : undefined,
+              publishedAt: new Date().toISOString(),
+            },
+          });
+        } else {
+          // attach media to existing entity
+          try {
+            await strapi.entityService.update(contentType, (entity as any).id, { data: { media: { connect: [createdFile.id] } } });
+          } catch {}
+          createdEntity = entity;
+        }
+        // Generate thumbnails for Posts/Reels when applicable
+        try {
+          const publicDir = (strapi.dirs && (strapi.dirs as any).public) || path.join(process.cwd(), 'public');
+          const videoUrl = createdFile?.url as string;
+          const isUploadedVideo = typeof videoUrl === 'string' && (/\.(mp4|mov)$/i.test(videoUrl) || (String(guessed || '').toLowerCase().includes('video')));
+          const uploadThumbAndAttach = async (thumbPath: string) => {
+            try {
+              const uploadSvc = strapi.plugin('upload').service('upload');
+              const st = await fs.promises.stat(thumbPath);
+              const guessedThumb = (require('mime-types').lookup(thumbPath) as string) || 'image/jpeg';
+              const files = [{ path: thumbPath, filepath: thumbPath, tmpPath: thumbPath, name: path.basename(thumbPath), type: guessedThumb, mime: guessedThumb, size: st.size, stream: fs.createReadStream(thumbPath) }];
+              const createdThumb = await uploadSvc.upload({ data: {}, files });
+              const file = Array.isArray(createdThumb) ? createdThumb[0] : createdThumb;
+              if (file?.id) {
+                try { await strapi.entityService.update(contentType, createdEntity.id, { data: { media: { connect: [file.id] } } }); } catch {}
+              }
+            } catch {}
+          };
+          if (isPosts) {
+            // For posts: if uploaded media is a video, attach a clean (no overlay) thumbnail
+            if (isUploadedVideo && typeof videoUrl === 'string') {
+              const absVideo = path.join(publicDir, videoUrl.startsWith('/') ? videoUrl.slice(1) : videoUrl);
+              const tmpThumb = path.join(TMP_ROOT, `post-thumb-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+              try {
+                await execFileAsync('ffmpeg', ['-y', '-ss', '1', '-i', absVideo, '-vframes', '1', '-vf', 'scale=640:-1', tmpThumb]);
+                await uploadThumbAndAttach(tmpThumb);
+              } catch {}
+            }
+          } else if (isReels) {
+            // For reels: only generate a fallback if no image thumbnail is present in media
+            try {
+              const fresh = await strapi.entityService.findOne(contentType, createdEntity.id, { populate: { media: true } });
+              const mediaList = Array.isArray((fresh as any)?.media?.data)
+                ? (fresh as any).media.data
+                : Array.isArray((fresh as any)?.media)
+                  ? (fresh as any).media
+                  : [];
+              const hasImage = mediaList.some((m: any) => String(m?.attributes?.mime || m?.mime || '').toLowerCase().includes('image'));
+              if (!hasImage && isUploadedVideo && typeof videoUrl === 'string') {
+                const absVideo = path.join(publicDir, videoUrl.startsWith('/') ? videoUrl.slice(1) : videoUrl);
+                const tmpThumb = path.join(TMP_ROOT, `reel-thumb-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+                try {
+                  await execFileAsync('ffmpeg', ['-y', '-ss', '1', '-i', absVideo, '-vframes', '1', '-vf', 'scale=640:-1', tmpThumb]);
+                  await uploadThumbAndAttach(tmpThumb);
+                } catch {}
+              }
+            } catch {}
+          }
+        } catch {}
+        // Link to Article(s) per mention
+        for (const mention of usernames) {
+          const uname = mention.startsWith('@') ? mention : `@${mention}`;
+          // find or create Article
+          let articleList = await strapi.entityService.findMany('api::article.article', { filters: { username: uname }, limit: 1 });
+          let article = (Array.isArray(articleList) && articleList[0]) ? articleList[0] : null;
+          if (!article) {
+            try {
+              article = await strapi.entityService.create('api::article.article', {
+                data: { username: uname, title: uname, slug: uname.replace(/^@/, ''), publishedAt: new Date().toISOString() },
+              });
+              if (article?.id) touchedArticleIds.add(article.id);
+            } catch {}
+          }
+          try {
+            const relField = isPosts ? 'posts' : 'reels';
+            await strapi.entityService.update('api::article.article', article.id, {
+              data: { [relField]: { connect: [createdEntity.id] } },
+            });
+            if (article?.id) touchedArticleIds.add(article.id);
+          } catch {}
+        }
+        continue; // skip story-specific linking below
+      }
+
+      // Stories: attach media to Article and update dates
       for (const mention of usernames) {
         const uname = mention.startsWith('@') ? mention : `@${mention}`;
+        if (!stats.usernamesTouched.includes(uname)) stats.usernamesTouched.push(uname);
         const found = await strapi.entityService.findMany('api::article.article', { filters: { username: uname }, limit: 1 });
         const baseName = targetName.replace(/\.[^.]+$/, '');
         let article = (found && found[0]) ? found[0] : null;
@@ -251,12 +492,13 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
                 username: uname,
                 title: uname,
                 slug: uname.replace(/^@/, ''),
-                description: truncate(title || '', 80),
+                description: title || '',
                 cover: createdFile?.id ? { connect: [createdFile.id] } : undefined,
                 publishedAt: new Date().toISOString(),
               },
             });
-            if (article?.id) touchedArticleIds.add(article.id);
+            if (article?.id) { touchedArticleIds.add(article.id); stats.articlesCreated += 1; }
+            if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Création de l’article pour ${uname}…`);
           } catch (e) {
             // Retry without description if it violates constraints
             article = await strapi.entityService.create('api::article.article', {
@@ -268,7 +510,8 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
                 publishedAt: new Date().toISOString(),
               },
             });
-            if (article?.id) touchedArticleIds.add(article.id);
+            if (article?.id) { touchedArticleIds.add(article.id); stats.articlesCreated += 1; }
+            if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Création de l’article pour ${uname}…`);
           }
         }
         // Ensure article is published
@@ -280,12 +523,36 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
         // Try to connect uploaded file to an optional 'media' field if it exists; ignore if it doesn't
         try {
           await strapi.entityService.update('api::article.article', article.id, { data: { media: { connect: [createdFile.id] } } });
-          if (article?.id) touchedArticleIds.add(article.id);
+          if (article?.id) { touchedArticleIds.add(article.id); stats.articlesUpdated += 1; }
+          if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Mise à jour de l’article ${uname}`);
         } catch {}
-        // Ensure cover is set if not already
+        // Ensure cover is set if not already; for videos, generate a thumbnail and set as cover
         try {
-          await strapi.entityService.update('api::article.article', article.id, { data: { cover: createdFile?.id ? { connect: [createdFile.id] } : undefined } });
-          if (article?.id && createdFile?.id) touchedArticleIds.add(article.id);
+          if (!article?.cover && createdFile?.id) {
+            let coverFileId: number | undefined = createdFile.id;
+            if (isVideo) {
+              try {
+                const publicDir = (strapi.dirs && (strapi.dirs as any).public) || path.join(process.cwd(), 'public');
+                const videoUrl = createdFile?.url as string;
+                const absVideo = path.join(publicDir, videoUrl.startsWith('/') ? videoUrl.slice(1) : videoUrl);
+                const tmpThumb = path.join(TMP_ROOT, `thumb-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+                const font = '/usr/share/fonts/dejavu/DejaVuSans.ttf';
+                try {
+                  await execFileAsync('ffmpeg', ['-y', '-ss', '1', '-i', absVideo, '-vframes', '1', '-vf', `scale=640:-1,drawtext=fontfile=${font}:text=▶:fontcolor=white:fontsize=120:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.4:boxborderw=20`, tmpThumb]);
+                } catch {
+                  await execFileAsync('ffmpeg', ['-y', '-ss', '1', '-i', absVideo, '-vframes', '1', '-vf', 'scale=640:-1', tmpThumb]);
+                }
+                const st2 = await fs.promises.stat(tmpThumb);
+                const filesThumb = [{ path: tmpThumb, filepath: tmpThumb, tmpPath: tmpThumb, name: path.basename(tmpThumb), type: 'image/jpeg', mime: 'image/jpeg', size: st2.size, stream: fs.createReadStream(tmpThumb) }];
+                const createdThumb = await strapi.plugin('upload').service('upload').upload({ data: {}, files: filesThumb });
+                const fileThumb = Array.isArray(createdThumb) ? createdThumb[0] : createdThumb;
+                coverFileId = fileThumb?.id || coverFileId;
+              } catch {}
+            }
+            await strapi.entityService.update('api::article.article', article.id, { data: { cover: coverFileId ? { connect: [coverFileId] } : undefined } });
+            if (article?.id) { touchedArticleIds.add(article.id); stats.articlesUpdated += 1; }
+            if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Mise à jour de l’article ${uname}`);
+          }
         } catch {}
         // Update visit dates: preserve first_visit, refresh last_visit
         try {
@@ -303,103 +570,392 @@ const processCategory = async (strapi: any, cat: any, usernameFromZip: string, t
 
 export default {
   async importZip(ctx: any) {
-    const filesObj = (ctx.request && ctx.request.files) || {};
-    try { ctx.strapi.log.debug(`[ig-import] received files keys=${JSON.stringify(Object.keys(filesObj || {}))}`); } catch {}
-    let file: any = undefined;
-    if (Array.isArray((filesObj as any).files)) file = (filesObj as any).files[0];
-    else if ((filesObj as any).files) file = (filesObj as any).files;
-    else if ((filesObj as any).file) file = (filesObj as any).file;
-    else {
-      const vals = Object.values(filesObj || {});
-      if (vals && vals.length) file = vals[0];
-    }
-    if (!file) {
-      ctx.status = 400;
-      ctx.body = { error: 'zip file is required (field: file or files)', details: Object.keys(filesObj || {}) };
-      return;
-    }
-    const tmpBase = path.join('/tmp', `igimport-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    await fs.promises.mkdir(tmpBase, { recursive: true });
-    const tmpZip = path.join(tmpBase, path.basename(file.name || file.originalFilename || file.newFilename || 'archive.zip'));
+    let tmpBase: string | null = null;
+    let shouldCleanup = true;
     try {
-      const sourcePath = (file.filepath || file.path || (file.files && file.files.path));
-      if (!sourcePath) throw new Error('no tmp path on uploaded file');
-      await fs.promises.copyFile(sourcePath, tmpZip);
-    } catch (e) {
-      ctx.status = 500;
-      ctx.body = { error: 'failed to stage file' };
-      return;
-    }
-    try {
-      await execFileAsync('unzip', ['-qq', tmpZip, '-d', tmpBase], { timeout: 60000 });
-    } catch (e: any) {
-      ctx.status = 500;
-      ctx.body = { error: `unzip failed: ${e?.message}` };
-      return;
-    }
-    try { ctx.strapi.log.info(`[ig-import] unzip ok tmpBase=${tmpBase}`); } catch {}
-    const zipName = path.basename(tmpZip);
-    const m = zipName.match(/instagram-([^\-]+)-/i);
-    const defaultUser = m ? m[1] : 'user';
+      const stats: ImportStats = {
+        categories: [],
+        jsonFound: [],
+        itemsTotal: 0,
+        uploaded: 0,
+        skippedMissingMedia: 0,
+        uploadErrors: 0,
+        byCategory: {},
+        articlesCreated: 0,
+        articlesUpdated: 0,
+        usernamesTouched: [],
+      };
 
-    const contentDir = path.join(tmpBase, 'your_instagram_activity', 'content');
-    const categoriesBase = ['posts', 'stories', 'reels'];
-    const touched = new Set<number>();
-    for (const key of categoriesBase) {
-      let jsonPath = await pickJsonPath(contentDir, key);
-      if (!jsonPath) jsonPath = await findJsonAnywhere(tmpBase, key);
-      if (!jsonPath) { try { ctx.strapi.log.info(`[ig-import] json not found for ${key}`); } catch {} continue; }
-      try { ctx.strapi.log.info(`[ig-import] using json for ${key}: ${jsonPath}`); } catch {}
-      await processCategory(strapi, { key, json: jsonPath, folderName: key.charAt(0).toUpperCase() + key.slice(1) }, defaultUser, touched);
-    }
-    // After import, refresh only articles that received new media/cover
-    try {
-      const ids = Array.from(touched);
-      if (ids.length) {
-        const hasDocumentsApi = typeof (strapi as any).documents === 'function';
-        const documentsApi = hasDocumentsApi ? (strapi as any).documents('api::article.article') : null;
-        let republished = 0;
-        let reassigned = 0;
-        let failed: Array<{ id: number; error: string }> = [];
+      const filesObj = (ctx.request && ctx.request.files) || {};
+      try { ctx.strapi.log.debug(`[ig-import] received files keys=${JSON.stringify(Object.keys(filesObj || {}))}`); } catch {}
 
-        for (const id of ids) {
+      // Only pick multipart fields likely to hold files
+      const collect: any[] = [];
+      const addMany = (v: any) => { if (!v) return; const arr = Array.isArray(v) ? v : [v]; for (const f of arr) { const p = (f && (f.filepath || f.path)); if (p) collect.push(f); } };
+      addMany((filesObj as any).files);
+      addMany((filesObj as any).file);
+
+      // Deduplicate by tmp path/name
+      const seen = new Set<string>();
+      const files = collect.filter((f) => {
+        const k = String((f as any).filepath || (f as any).path || (f as any).name || Math.random());
+        if (seen.has(k)) return false; seen.add(k); return true;
+      });
+      if (!files.length) {
+        ctx.status = 400;
+        ctx.body = { error: 'At least one .zip file is required (use field: files)' };
+        return;
+      }
+
+      tmpBase = path.join(TMP_ROOT, `igimport-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      await fs.promises.mkdir(tmpBase, { recursive: true });
+
+      // Create job and start background processing
+      const jobId = newJobId();
+      const job: Job = {
+        id: jobId,
+        dir: tmpBase,
+        stage: 'queued',
+        percent: 10,
+        stats,
+        startedAt: now(),
+        updatedAt: now(),
+        done: false,
+        messages: [],
+      };
+      jobs[jobId] = job;
+
+      // Stage uploads into job dir first
+      for (const f of files) {
+        const displayName = f.name || f.originalFilename || f.newFilename || 'archive.zip';
+        const tmpZip = path.join(tmpBase, path.basename(displayName));
+        const sourcePath = (f.filepath || f.path || (f.files && f.files.path));
+        if (!sourcePath) {
+          setJob(job, { stage: 'error', error: 'failed to stage file (no tmp path)', done: true });
+          ctx.status = 500; ctx.body = { error: 'failed to stage file (no tmp path)' }; return;
+        }
+        await fs.promises.copyFile(sourcePath, tmpZip);
+      }
+
+      // Snapshot staging context to avoid closure races
+      const workDir = tmpBase as string;
+      const stagedFiles = files.slice();
+
+      // Kick off async worker
+      (async () => {
+        let dir: string | null = null;
+        try {
+          dir = workDir;
+          if (!dir || typeof dir !== 'string') {
+            setJob(job, { stage: 'error', error: 'internal: no working directory', done: true });
+            return;
+          }
+          setJob(job, { stage: 'unzipping', percent: Math.max(job.percent, 12) });
+          pushMsg(job, 'Décompression des archives…');
+          let defaultUser = 'user';
+          // Unzip each staged archive
+          for (const f of stagedFiles) {
+            const displayName = f.name || f.originalFilename || f.newFilename || 'archive.zip';
+            const tmpZip = path.join(dir, path.basename(displayName));
+            try {
+              await execFileAsync('unzip', ['-qq', tmpZip, '-d', dir], { timeout: 0 });
+            } catch (e: any) {
+              setJob(job, { stage: 'error', error: `unzip failed: ${e?.message || e}`, done: true, percent: job.percent });
+              return;
+            }
+            const m = String(displayName).match(/instagram-([^\-]+)-/i);
+            if (m) defaultUser = m[1];
+          }
+
+          // Quick visibility into extracted tree (top-level only)
           try {
-            const art = await strapi.entityService.findOne('api::article.article', id, { populate: { media: true, cover: true } });
-            if (!art) continue;
-            const artAny: any = art as any;
-            if (documentsApi && artAny.documentId) {
-              try {
-                await documentsApi.publish({ documentId: artAny.documentId });
-                republished++;
-                continue;
-              } catch {
+            const tops = await fs.promises.readdir(dir, { withFileTypes: true });
+            const names = tops.map((e) => (e.isDirectory() ? e.name + '/' : e.name)).slice(0, 20).join(', ');
+            pushMsg(job, `Racine extraite: ${names}`);
+          } catch {}
+
+          const contentDir = path.join(dir, 'your_instagram_activity', 'content');
+          const mediaDir = path.join(dir, 'your_instagram_activity', 'media');
+          const categoriesBase = ['posts', 'stories', 'reels'];
+          const touched = new Set<number>();
+
+          // Update profile avatar if present
+          try {
+            const profileJson = path.join(mediaDir, 'profile_photos.json');
+            if (await fileExists(profileJson)) {
+              const txt = await fs.promises.readFile(profileJson, 'utf8');
+              const arr = JSON.parse(txt);
+              const list: any[] = Array.isArray(arr) ? arr : [];
+              // Prefer latest by creation_timestamp
+              const latest = list.slice().sort((a, b) => (b?.creation_timestamp || 0) - (a?.creation_timestamp || 0))[0];
+              const uri = latest?.uri || latest?.path;
+              if (uri) {
+                const p = await resolveProfileMedia(dir, String(uri));
+                if (p) {
+                  const uname = `@${String(defaultUser || '').toLowerCase()}`;
+                  let artList = await strapi.entityService.findMany('api::article.article', { filters: { username: uname }, limit: 1 });
+                  let article = (Array.isArray(artList) && artList[0]) ? artList[0] : null;
+                  if (!article) {
+                    try {
+                      article = await strapi.entityService.create('api::article.article', {
+                        data: { username: uname, title: uname, slug: uname.replace(/^@/, ''), publishedAt: new Date().toISOString() },
+                      });
+                    } catch {}
+                  }
+                  try {
+                    const uploadSvc = strapi.plugin('upload').service('upload');
+                    const stat = await fs.promises.stat(p);
+                    const guessed = (mime.lookup(p) as string) || 'image/jpeg';
+                    const files = [{ path: p, filepath: p, tmpPath: p, name: path.basename(p), type: guessed, mime: guessed, size: stat.size, stream: fs.createReadStream(p) }];
+                    const created = await uploadSvc.upload({ data: {}, files });
+                    const file = Array.isArray(created) ? created[0] : created;
+                    await (strapi as any).entityService.update('api::article.article', article.id, { data: { avatar: file?.id ? { connect: [file.id] } : undefined } as any });
+                    pushMsg(job, 'Avatar mis à jour');
+                  } catch {}
+                }
+              }
+            }
+          } catch {}
+          // Discover JSONs (robust to localized/new archive formats)
+          const discovered = await (async () => {
+            const list: Array<{ key: string; path: string }> = [];
+            for (const key of categoriesBase) {
+              let jsonPath = await pickJsonPath(contentDir, key);
+              if (!jsonPath) jsonPath = await findJsonAnywhere(dir, key);
+              if (jsonPath) list.push({ key, path: jsonPath });
+            }
+            if (list.length) return list;
+            // Fallback to heuristic scan
+            const heuristic = await discoverCategoryJsons(dir);
+            if (!heuristic.length) return list;
+            // Log which files were picked
+            try { pushMsg(job, `Découverte heuristique: ${heuristic.map((h) => path.basename(h.path)).join(', ')}`); } catch {}
+            return heuristic;
+          })();
+
+          // Compute progress targets and messages
+          for (const meta of discovered) {
+            const key = meta.key;
+            const jsonPath = meta.path;
+            stats.categories.push(key);
+            stats.jsonFound.push({ key, path: jsonPath });
+            try {
+              const buf = await fs.promises.readFile(jsonPath);
+              const raw = JSON.parse(buf.toString('utf8'));
+              const arr: any[] = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? ((Object.values(raw).find((v) => Array.isArray(v)) as any[]) || []) : []);
+              stats.itemsTotal += arr.length;
+              let earliest = Infinity;
+              for (const it of arr) {
+                const ts = (it && (it.creation_timestamp || (it as any).taken_at || ((it as any).media && (it as any).media[0] && (it as any).media[0].creation_timestamp))) || 0;
+                if (ts && ts < earliest) earliest = ts;
+              }
+              if (earliest !== Infinity) {
+                const d = new Date(earliest * 1000);
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                const label = key === 'stories' ? 'stories' : key === 'reels' ? 'reels' : 'posts';
+                pushMsg(job, `Import des ${label} du ${dd}/${mm}/${yyyy}`);
+              }
+            } catch {}
+          }
+
+          setJob(job, { stage: 'processing', percent: Math.max(job.percent, stats.itemsTotal ? 20 : 15) });
+          if (!stats.itemsTotal) pushMsg(job, 'Aucun élément détecté dans les JSON');
+
+          const onProgress = (uploaded: number, total: number, msg?: string) => {
+            // Map uploaded/total into 10% → 90%
+            const base = 10;
+            const span = 80; // keep headroom for finalizing
+            const frac = total > 0 ? Math.min(1, uploaded / total) : 0;
+            const pct = Math.min(90, Math.floor(base + frac * span));
+            setJob(job, { percent: Math.max(job.percent, pct) });
+            if (msg) pushMsg(job, msg);
+          };
+
+          // Now process each category with progress callback
+          for (const meta of stats.jsonFound) {
+            const key = meta.key;
+            await processCategory(
+              strapi,
+              { key, json: meta.path, folderName: key.charAt(0).toUpperCase() + key.slice(1) },
+              defaultUser,
+              touched,
+              stats,
+              onProgress,
+            );
+          }
+
+          // Finalization stage
+          setJob(job, { stage: 'finalizing', percent: Math.max(job.percent, 95) });
+          pushMsg(job, 'Sauvegarde…');
+          try {
+            const ids = Array.from(touched);
+            if (ids.length) {
+              const hasDocumentsApi = typeof (strapi as any).documents === 'function';
+              const documentsApi = hasDocumentsApi ? (strapi as any).documents('api::article.article') : null;
+              for (const id of ids) {
                 try {
-                  await documentsApi.unpublish({ documentId: artAny.documentId });
-                  await documentsApi.publish({ documentId: artAny.documentId });
-                  republished++;
-                  continue;
+                  const art = await strapi.entityService.findOne('api::article.article', id, { populate: { media: true, cover: true } });
+                  if (!art) continue;
+                  const artAny: any = art as any;
+                  if (documentsApi && artAny.documentId) {
+                    try { await documentsApi.publish({ documentId: artAny.documentId }); }
+                    catch { try { await documentsApi.unpublish({ documentId: artAny.documentId }); await documentsApi.publish({ documentId: artAny.documentId }); } catch {} }
+                  } else {
+                    const mediaList = Array.isArray(artAny.media?.data) ? artAny.media.data : (Array.isArray(artAny.media) ? artAny.media : []);
+                    const mediaIds = mediaList.map((m: any) => (m?.id ?? m?.documentId ?? null)).filter(Boolean);
+                    const coverId = artAny.cover?.id ?? artAny.cover?.data?.id ?? null;
+                    await strapi.entityService.update('api::article.article', id, { data: { media: mediaIds, cover: coverId } });
+                  }
                 } catch {}
               }
             }
-            const mediaList = Array.isArray(artAny.media?.data)
-              ? artAny.media.data
-              : Array.isArray(artAny.media)
-                ? artAny.media
-                : [];
-            const mediaIds = mediaList.map((m: any) => (m?.id ?? m?.documentId ?? null)).filter(Boolean);
-            const coverId = artAny.cover?.id ?? artAny.cover?.data?.id ?? null;
-            await strapi.entityService.update('api::article.article', id, { data: { media: mediaIds, cover: coverId } });
-            reassigned++;
-          } catch (e: any) {
-            failed.push({ id, error: String(e?.message || e) });
-          }
+          } catch {}
+
+          // Final summary message
+          try {
+            const by = stats.byCategory || {} as any;
+            const nPosts = by.posts?.uploaded || 0;
+            const nReels = by.reels?.uploaded || 0;
+            const nStories = by.stories?.uploaded || 0;
+            const created = stats.articlesCreated || 0;
+            const updated = stats.articlesUpdated || 0;
+            let sentence = `${nPosts} posts, ${nReels} reels et ${nStories} stories ajoutés`;
+            if (created && !updated) sentence += `, ${created} articles créés !`;
+            else if (!created && updated) sentence += `, ${updated} articles mis à jour !`;
+            else if (created && updated) sentence += `, ${created} articles créés, ${updated} articles mis à jour !`;
+            else sentence += ' !';
+            pushMsg(job, sentence);
+          } catch {}
+          setJob(job, { stage: 'done', percent: 100, done: true });
+        } catch (e: any) {
+          setJob(job, { stage: 'error', error: String(e?.message || e), done: true });
+        } finally {
+          // Cleanup job dir
+          try { if (dir) await fs.promises.rm(dir, { recursive: true, force: true }); } catch {}
         }
-        ctx.body = { ok: true, refreshed: ids.length, republished, reassigned, failed };
-        return;
+      })();
+
+      // Respond immediately with job id for polling. Prevent request-level cleanup;
+      // background worker will handle tmp dir removal.
+      ctx.body = { ok: true, jobId };
+      shouldCleanup = false; // background worker owns cleanup
+      return;
+
+      // Extract each archive into the same folder
+      let defaultUser = 'user';
+      for (const f of files) {
+        const displayName = f.name || f.originalFilename || f.newFilename || 'archive.zip';
+        const tmpZip = path.join(tmpBase, path.basename(displayName));
+        const sourcePath = (f.filepath || f.path || (f.files && f.files.path));
+        if (!sourcePath) {
+          ctx.status = 500; ctx.body = { error: 'failed to stage file (no tmp path)', file: displayName }; return;
+        }
+        await fs.promises.copyFile(sourcePath, tmpZip);
+        try {
+          await execFileAsync('unzip', ['-qq', tmpZip, '-d', tmpBase], { timeout: 0 });
+        } catch (e: any) {
+          ctx.status = 500; ctx.body = { error: `unzip failed: ${e?.message}`, file: displayName }; return;
+        }
+        try { ctx.strapi.log.info(`[ig-import] unzip ok tmpBase=${tmpBase} from ${displayName}`); } catch {}
+        const m = String(displayName).match(/instagram-([^\-]+)-/i);
+        if (m) defaultUser = m[1];
       }
-    } catch (e) {
-      // Non-fatal; continue
+
+      const contentDir = path.join(tmpBase, 'your_instagram_activity', 'content');
+      const categoriesBase = ['posts', 'stories', 'reels'];
+      const touched = new Set<number>();
+      for (const key of categoriesBase) {
+        let jsonPath = await pickJsonPath(contentDir, key);
+        if (!jsonPath) jsonPath = await findJsonAnywhere(tmpBase, key);
+        if (!jsonPath) { try { ctx.strapi.log.info(`[ig-import] json not found for ${key}`); } catch {} continue; }
+        stats.categories.push(key);
+        stats.jsonFound.push({ key, path: jsonPath });
+        try { ctx.strapi.log.info(`[ig-import] using json for ${key}: ${jsonPath}`); } catch {}
+        await processCategory(strapi, { key, json: jsonPath, folderName: key.charAt(0).toUpperCase() + key.slice(1) }, defaultUser, touched, stats);
+      }
+
+      // After import, refresh only articles that received new media/cover
+      try {
+        const ids = Array.from(touched);
+        if (ids.length) {
+          const hasDocumentsApi = typeof (strapi as any).documents === 'function';
+          const documentsApi = hasDocumentsApi ? (strapi as any).documents('api::article.article') : null;
+          let republished = 0;
+          let reassigned = 0;
+          let failed: Array<{ id: number; error: string }> = [];
+
+          for (const id of ids) {
+            try {
+              const art = await strapi.entityService.findOne('api::article.article', id, { populate: { media: true, cover: true } });
+              if (!art) continue;
+              const artAny: any = art as any;
+              if (documentsApi && artAny.documentId) {
+                try {
+                  await documentsApi.publish({ documentId: artAny.documentId });
+                  republished++;
+                  continue;
+                } catch {
+                  try {
+                    await documentsApi.unpublish({ documentId: artAny.documentId });
+                    await documentsApi.publish({ documentId: artAny.documentId });
+                    republished++;
+                    continue;
+                  } catch {}
+                }
+              }
+              const mediaList = Array.isArray(artAny.media?.data)
+                ? artAny.media.data
+                : Array.isArray(artAny.media)
+                  ? artAny.media
+                  : [];
+              const mediaIds = mediaList.map((m: any) => (m?.id ?? m?.documentId ?? null)).filter(Boolean);
+              const coverId = artAny.cover?.id ?? artAny.cover?.data?.id ?? null;
+              await strapi.entityService.update('api::article.article', id, { data: { media: mediaIds, cover: coverId } });
+              reassigned++;
+            } catch (e: any) {
+              failed.push({ id, error: String(e?.message || e) });
+            }
+          }
+          ctx.body = { ok: true, stats, refreshed: ids.length, republished, reassigned, failed };
+          return;
+        }
+      } catch (e) {
+        // Non-fatal; continue
+      }
+      ctx.body = { ok: true, stats, refreshed: 0 };
+    } catch (err: any) {
+      try { ctx.strapi.log.error('[ig-import] fatal error ' + (err?.stack || err?.message || String(err))); } catch {}
+      ctx.status = 500;
+      ctx.body = { data: null, error: { status: 500, name: 'InternalServerError', message: err?.message || 'import failed', detail: String(err) } };
+    } finally {
+      // Best-effort cleanup of temporary extraction directory when no background job was started
+      if (shouldCleanup && tmpBase) {
+        try {
+          await fs.promises.rm(tmpBase, { recursive: true, force: true });
+          try { ctx.strapi.log.debug(`[ig-import] cleaned tmp dir ${tmpBase}`); } catch {}
+        } catch (e) {
+          try { ctx.strapi.log.warn(`[ig-import] failed to clean tmp dir ${tmpBase}: ${String((e as any)?.message || e)}`); } catch {}
+        }
+      }
     }
-    ctx.body = { ok: true, refreshed: 0 };
+  },
+  async status(ctx: any) {
+    const id = String(ctx.request.query?.job || ctx.request.query?.id || '').trim();
+    if (!id) { ctx.status = 400; ctx.body = { error: 'job query parameter is required' }; return; }
+    const job = jobs[id];
+    if (!job) { ctx.status = 404; ctx.body = { error: 'job not found' }; return; }
+    ctx.body = {
+      id: job.id,
+      stage: job.stage,
+      percent: job.percent,
+      stats: job.stats,
+      error: job.error,
+      startedAt: job.startedAt,
+      updatedAt: job.updatedAt,
+      done: job.done,
+      messages: job.messages,
+    };
   },
 };

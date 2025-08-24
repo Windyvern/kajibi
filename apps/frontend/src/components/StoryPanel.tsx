@@ -5,25 +5,37 @@ import { StoryPanelData } from "@/types/story";
 
 interface StoryPanelProps {
   panel: StoryPanelData;
+  paused?: boolean;
+  externalMuteToggle?: number; // increments to toggle mute from parent
   onVideoMeta?: (durationSec: number) => void;
   onVideoTime?: (currentSec: number, durationSec: number) => void;
   onVideoEnded?: () => void;
 }
 
-export const StoryPanel = ({ panel, onVideoMeta, onVideoTime, onVideoEnded }: StoryPanelProps) => {
-  const [muted, setMuted] = useState(true);
+export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoMeta, onVideoTime, onVideoEnded }: StoryPanelProps) => {
+  // Persist mute state for the session; default to true (muted) at session start
+  const STORAGE_KEY = 'storyViewer:muted';
+  const readInitialMuted = () => {
+    try {
+      const v = sessionStorage.getItem(STORAGE_KEY);
+      if (v === 'false') return false; // user previously unmuted in this session
+    } catch {}
+    return true;
+  };
+  const [muted, setMuted] = useState<boolean>(readInitialMuted());
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [pausedInternal, setPausedInternal] = useState(true);
 
   useEffect(() => {
-    // Reset mute when media changes
-    setMuted(true);
-    if (videoRef.current) {
-      videoRef.current.muted = true;
-    }
+    // On media change, respect session preference (default muted)
+    const pref = readInitialMuted();
+    setMuted(pref);
+    if (videoRef.current) videoRef.current.muted = pref;
     // Attempt autoplay muted on mount/change
     if (videoRef.current) {
-      videoRef.current.play().catch(() => {
+      videoRef.current.play().then(() => setPausedInternal(false)).catch(() => {
         // Autoplay might be blocked until user interacts
+        setPausedInternal(true);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -36,11 +48,39 @@ export const StoryPanel = ({ panel, onVideoMeta, onVideoTime, onVideoEnded }: St
     const next = !muted;
     setMuted(next);
     v.muted = next;
+    try { sessionStorage.setItem(STORAGE_KEY, String(next)); } catch {}
     if (!next) {
       // Ensure playback resumes with audio after a user gesture
       v.play().catch(() => {});
     }
   };
+
+  // Allow parent to toggle mute without rendering the button here
+  const lastToggleRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (externalMuteToggle == null) return;
+    if (lastToggleRef.current === externalMuteToggle) return;
+    lastToggleRef.current = externalMuteToggle;
+    const v = videoRef.current;
+    if (!v) return;
+    const next = !muted;
+    setMuted(next);
+    v.muted = next;
+    try { sessionStorage.setItem(STORAGE_KEY, String(next)); } catch {}
+    if (!next) { v.play().catch(() => {}); }
+  }, [externalMuteToggle]);
+
+  // React to external pause/resume
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (paused) {
+      try { v.pause(); } catch {}
+      setPausedInternal(true);
+    } else {
+      v.play().then(() => setPausedInternal(false)).catch(() => {/* ignore */});
+    }
+  }, [paused]);
 
   const renderContent = () => {
     switch (panel.type) {
@@ -96,6 +136,7 @@ export const StoryPanel = ({ panel, onVideoMeta, onVideoTime, onVideoEnded }: St
                 src={panel.media}
                 className="w-full h-full object-cover"
                 ref={videoRef}
+                data-role="main-video"
                 autoPlay
                 muted={muted}
                 preload="auto"
@@ -112,17 +153,24 @@ export const StoryPanel = ({ panel, onVideoMeta, onVideoTime, onVideoEnded }: St
                     onVideoTime?.(v.currentTime, v.duration);
                   }
                 }}
+                onPlay={() => setPausedInternal(false)}
+                onPause={() => setPausedInternal(true)}
                 onEnded={() => onVideoEnded?.()}
               />
             )}
-            {/* Mute/Unmute toggle */}
-            <button
-              onClick={toggleMute}
-              className="absolute top-32 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition"
-              aria-label={muted ? "Unmute video" : "Mute video"}
-            >
-              {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-            </button>
+            {/* Play overlay when paused */}
+            {panel.media && pausedInternal && (
+              <button
+                onClick={(e) => { e.stopPropagation(); try { videoRef.current?.play(); } catch {} }}
+                className="absolute inset-0 flex items-center justify-center z-20"
+                aria-label="Play video"
+              >
+                <span className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
+                  <img src="/icons/play.svg" alt="Play" className="w-8 h-8" />
+                </span>
+              </button>
+            )}
+            {/* Mute button rendered by parent for consistent alignment across layouts */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             {(panel.title || panel.content) && (
               <div className="absolute bottom-0 left-0 right-0 p-8">

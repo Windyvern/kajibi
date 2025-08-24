@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
@@ -21,6 +19,9 @@ services:
   api:
     build: ./apps/backend
     env_file: ./apps/backend/.env
+    environment:
+      # Rebuild Strapi admin when files change (so UI updates apply in dev)
+      STRAPI_ADMIN_WATCH: "true"
     ports:
       - "1337:1337"
     volumes:

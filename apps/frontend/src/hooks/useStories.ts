@@ -44,6 +44,8 @@ export const useStories = () => {
           '&populate%5Bcategory%5D=true' +
           // Populate media relation (Strapi returns all items for multi-media relations)
           '&populate%5Bmedia%5D=true' +
+          // Populate avatar image
+          '&populate%5Bavatar%5D=true' +
           // Populate lists and their cover for thumbnails
           '&populate%5Blists%5D%5Bpopulate%5D=cover' +
           '&pagination%5BpageSize%5D=1000'
@@ -152,6 +154,7 @@ export const useStories = () => {
           thumbnailPanelId: imagePanel?.id,
           rating: attrs.rating != null ? Number(attrs.rating) : undefined,
           username: attrs.username || undefined,
+          avatarUrl: getMediaUrl(attrs.avatar),
           lists: Array.isArray(attrs.lists)
             ? attrs.lists.map((l: any) => ({
                 id: String(l.id || l.documentId || ''),
