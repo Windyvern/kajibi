@@ -1,9 +1,11 @@
 import { useStories } from '@/hooks/useStories';
 import { Story } from '@/types/story';
 import { Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onSelect?: (story: Story) => void, stories?: Story[] }) => {
+  const navigate = useNavigate();
   const { data: fetchedStories, isLoading, error } = useStories();
   const stories = inputStories ?? fetchedStories;
 
@@ -30,11 +32,16 @@ export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onS
   );
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+    // French format, e.g., 12 septembre 2025
+    try {
+      return new Date(dateString).toLocaleDateString('fr-FR', {
+        year: 'numeric',
+        month: 'long',
+        day: '2-digit',
+      });
+    } catch {
+      return new Date(dateString).toLocaleDateString('fr-FR');
+    }
   };
 
   const renderStars = (rating: number) => {
@@ -94,6 +101,24 @@ export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onS
                   <h3 className="font-semibold text-lg mb-1 line-clamp-2">
                     {story.title}
                   </h3>
+                  {/* Type(s) below title (support multiple, fallback to category) */}
+                  {(() => {
+                    const typeText = Array.isArray(story.types) && story.types.length > 0
+                      ? story.types.join(', ')
+                      : (story.category || (story as any).type);
+                    return typeText ? (
+                      <p className="text-sm text-gray-200 mb-1 line-clamp-1">
+                        <span className="font-semibold">Type</span> : {typeText}
+                      </p>
+                    ) : null;
+                  })()}
+
+                  {/* Prize names (textual) below types when available */}
+                  {Array.isArray(story.prizes) && story.prizes.length > 0 && (
+                    <p className="text-sm text-gray-200 mb-1 line-clamp-1">
+                      <span className="font-semibold">Prix</span> : {story.prizes.map(p => p.name).join(', ')}
+                    </p>
+                  )}
                   
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-gray-200">
@@ -108,7 +133,41 @@ export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onS
                       </div>
                     )}
                   </div>
-                  
+                  {/* Prizes pictograms: bottom-right on desktop, top-right on mobile */}
+                  {Array.isArray(story.prizes) && story.prizes.length > 0 && (
+                    <>
+                      {/* Mobile badges: top-right */}
+                      <div className="absolute top-3 right-3 md:hidden flex flex-col items-end gap-1">
+                        {story.prizes.slice(0, 3).map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/gallery?prize=${encodeURIComponent(p.slug || p.id)}`); }}
+                            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold shadow"
+                            style={{ color: p.textColor || '#111', backgroundColor: p.bgColor || '#fff' }}
+                            aria-label={`Voir ${p.name}`}
+                          >
+                            {p.iconUrl && (<img src={p.iconUrl} alt="" className="w-4 h-4 rounded-sm object-cover" />)}
+                            <span>{p.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {/* Desktop badges: bottom-right */}
+                      <div className="hidden md:flex absolute bottom-3 right-3 flex-col items-end gap-1">
+                        {story.prizes.slice(0, 3).map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/gallery?prize=${encodeURIComponent(p.slug || p.id)}`); }}
+                            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold shadow"
+                            style={{ color: p.textColor || '#111', backgroundColor: p.bgColor || '#fff' }}
+                            aria-label={`Voir ${p.name}`}
+                          >
+                            {p.iconUrl && (<img src={p.iconUrl} alt="" className="w-4 h-4 rounded-sm object-cover" />)}
+                            <span>{p.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                   {/* Author hidden for now; use formatAuthor(story.username) when needed */}
                 </div>
               </div>

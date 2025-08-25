@@ -24,6 +24,8 @@ services:
       STRAPI_ADMIN_WATCH: "true"
     ports:
       - "1337:1337"
+      # Expose Strapi admin Vite dev server for hot reload during `develop`
+      - "5173:5173"
     volumes:
       - ./apps/backend:/opt/app
       # Prevent host node_modules (darwin) from shadowing container's (linux)

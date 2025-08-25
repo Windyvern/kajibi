@@ -16,6 +16,7 @@ import { useSearchFilter } from '@/hooks/useSearchFilter';
 const MapView = () => {
   const { data: stories, isLoading, error } = useStories();
   const [params] = useSearchParams();
+  const prizeParam = params.get('prize');
   // Search params (single hook instance used everywhere)
   const q = params.get('q');
   const navigate = useNavigate();
@@ -104,7 +105,10 @@ const MapView = () => {
     images: sf.includes('i'),
   } as const;
   const { filtered, matchedPanelByStory, strongMatchStoryId } = useSearchFilter(stories, q, fields);
-  const visibleStories = q ? filtered : (stories || []);
+  let visibleStories = q ? filtered : (stories || []);
+  if (prizeParam) {
+    visibleStories = visibleStories.filter((s) => (s.prizes || []).some((p) => (p.slug || p.id) === prizeParam));
+  }
 
   // Center on strong match
   useEffect(() => {

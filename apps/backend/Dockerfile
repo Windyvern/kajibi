@@ -25,8 +25,8 @@ COPY package.json package-lock.json ./
 # Ensure node-gyp present and allow longer fetch timeouts for prebuilt binaries
 RUN npm install -g node-gyp \
  && npm config set fetch-retry-maxtimeout 600000 -g \
- # Install with dev deps so `strapi develop` works when mounted in compose
- && npm ci \
+ # Install app dependencies (respecting NODE_ENV=production) and accept legacy peers for google-maps plugin
+ && npm install --no-audit --no-fund --legacy-peer-deps \
  # Ensure sharp native binding is built for alpine/musl
  && npm rebuild sharp --verbose
 WORKDIR /opt/app

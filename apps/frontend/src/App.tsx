@@ -12,6 +12,8 @@ import Lists from "./pages/Lists";
 import ListDetail from "./pages/ListDetail";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
+import Authors from "./pages/Authors";
+import AuthorDetail from "./pages/AuthorDetail";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +29,8 @@ const App = () => (
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/lists" element={<Lists />} />
           <Route path="/lists/:slug" element={<ListDetail />} />
+          <Route path="/authors" element={<Authors />} />
+          <Route path="/authors/:slug" element={<AuthorDetail />} />
           <Route path="/story/:slug" element={<Story />} />
           <Route path="/admin" element={<AdminDashboard />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

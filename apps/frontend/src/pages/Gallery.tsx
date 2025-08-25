@@ -16,6 +16,7 @@ const GalleryPage = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const listParam = params.get('list');
+  const prizeParam = params.get('prize');
   const q = params.get('q');
 
   if (isLoading) {
@@ -43,9 +44,13 @@ const GalleryPage = () => {
   }
 
   // Filter stories by list if list param is present
-  const baseStories = !stories ? [] : listParam
-    ? stories.filter((s) => (s.lists || []).some((l) => (l.slug || l.id) === listParam))
-    : stories;
+  let baseStories = stories || [];
+  if (listParam) {
+    baseStories = baseStories.filter((s) => (s.lists || []).some((l) => (l.slug || l.id) === listParam));
+  }
+  if (prizeParam) {
+    baseStories = baseStories.filter((s) => (s.prizes || []).some((p) => (p.slug || p.id) === prizeParam));
+  }
   const sf = params.get('sf') || 't,u,a,d,i';
   const fields = {
     title: sf.includes('t'),
@@ -58,12 +63,21 @@ const GalleryPage = () => {
   const displayedStories = q ? filtered : baseStories;
 
   const listTitle = (() => {
-    if (!listParam) return null;
-    for (const s of stories || []) {
-      const m = (s.lists || []).find((l) => (l.slug || l.id) === listParam);
-      if (m?.name) return m.name;
+    if (listParam) {
+      for (const s of stories || []) {
+        const m = (s.lists || []).find((l) => (l.slug || l.id) === listParam);
+        if (m?.name) return m.name;
+      }
+      return listParam;
     }
-    return listParam;
+    if (prizeParam) {
+      for (const s of stories || []) {
+        const p = (s.prizes || []).find((p) => (p.slug || p.id) === prizeParam);
+        if (p?.name) return p.name;
+      }
+      return prizeParam;
+    }
+    return null;
   })();
 
   return (
@@ -120,7 +134,7 @@ const GalleryPage = () => {
         </div>
       </div>
 
-      {(listParam || q) && (
+      {(listParam || prizeParam || q) && (
         <div className="px-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold">
