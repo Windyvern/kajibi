@@ -1,15 +1,17 @@
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useList } from '@/hooks/useList';
 import { useStories } from '@/hooks/useStories';
-import { Loader2, Grid3X3, Map } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
 import { Story } from '@/types/story';
+import { ViewToggle } from '@/components/ViewToggle';
 
 const ListDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: list, isLoading, error } = useList(slug || '');
   const { data: stories } = useStories();
 
@@ -64,18 +66,7 @@ const ListDetailPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="p-4 flex justify-end gap-2">
-        <Link to="/gallery">
-          <Button variant="outline" className="bg-white/10 border-white/20">
-            <Grid3X3 size={16} className="mr-2" />
-            Galerie
-          </Button>
-        </Link>
-        <Link to="/map">
-          <Button variant="outline" className="bg-white/10 border-white/20">
-            <Map size={16} className="mr-2" />
-            Carte
-          </Button>
-        </Link>
+        <ViewToggle mode="route" />
       </div>
 
       <div className="p-6">
@@ -100,7 +91,11 @@ const ListDetailPage = () => {
                 <div
                   key={story.id}
                   className="relative group cursor-pointer transition-transform hover:scale-105 duration-200"
-                  onClick={() => navigate(`/story/${encodeURIComponent(story.handle || story.id)}`)}
+                  onClick={() => {
+                    const current = `${location.pathname}${location.search}`;
+                    try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}
+                    navigate(`/story/${encodeURIComponent(story.handle || story.id)}?from=${encodeURIComponent(current)}`);
+                  }}
                 >
                   <div className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg">
                     {story.thumbnail && (

@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { useStories } from '@/hooks/useStories';
 import { Story } from '@/types/story';
 import { Button } from '@/components/ui/button';
-import { Map, List as ListIcon } from 'lucide-react';
+import { List as ListIcon } from 'lucide-react';
+import { ViewToggle } from '@/components/ViewToggle';
 import { SearchBar } from '@/components/SearchBar';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
 
@@ -14,10 +15,24 @@ const GalleryPage = () => {
   const [selected, setSelected] = useState<Story | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
   const listParam = params.get('list');
   const prizeParam = params.get('prize');
   const q = params.get('q');
+  // Restore scroll if returning from a story in gallery context
+  const locKey = `${location.pathname}${location.search}`;
+  useEffect(() => {
+    try {
+      const v = sessionStorage.getItem(`scroll:${locKey}`);
+      if (v) {
+        window.requestAnimationFrame(() => {
+          window.scrollTo(0, parseInt(v, 10) || 0);
+          sessionStorage.removeItem(`scroll:${locKey}`);
+        });
+      }
+    } catch {}
+  }, [locKey]);
 
   if (isLoading) {
     return (
@@ -87,7 +102,7 @@ const GalleryPage = () => {
         {/* Desktop / wide screens: row with centered search and right actions */}
         <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
           <div />
-          <div className="justify-self-center w-full md:w-[540px] lg:w-[620px] xl:w-[720px]">
+          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
             <SearchBar
               showFilters={filtersOpen}
               onToggleFilters={() => setFiltersOpen(o => !o)}
@@ -100,12 +115,7 @@ const GalleryPage = () => {
                 Listes
               </Button>
             </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
+            <ViewToggle mode="route" />
           </div>
         </div>
 
@@ -124,12 +134,7 @@ const GalleryPage = () => {
                 Listes
               </Button>
             </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
+            <ViewToggle mode="route" />
           </div>
         </div>
       </div>
@@ -158,7 +163,10 @@ const GalleryPage = () => {
         onSelect={(story) => {
           const pid = q ? matchedPanelByStory[story.id] : undefined;
           const base = `/story/${encodeURIComponent(story.handle || story.id)}`;
-          const from = 'from=gallery';
+          const current = `${location.pathname}${location.search}`;
+          // Save scroll position for gallery return
+          try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}
+          const from = `from=${encodeURIComponent(current)}`;
           navigate(
             pid
               ? `${base}?${from}&panel=${encodeURIComponent(pid)}`

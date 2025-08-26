@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useLists } from '@/hooks/useLists';
 import { Button } from '@/components/ui/button';
-import { Loader2, Map, Grid3X3 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { ViewToggle } from '@/components/ViewToggle';
 import { SearchBar } from '@/components/SearchBar';
 import { useState } from 'react';
 
@@ -41,25 +42,14 @@ const ListsPage = () => {
       <div className="px-4 md:px-6 pt-4">
         <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
           <div />
-          <div className="justify-self-center w-full md:w-[540px] lg:w-[620px] xl:w-[720px]">
+          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
             <SearchBar
               showFilters={filtersOpen}
               onToggleFilters={() => setFiltersOpen(o => !o)}
             />
           </div>
           <div className="flex items-center justify-end gap-2">
-            <Link to="/gallery">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Grid3X3 size={16} className="mr-2" />
-                Galerie
-              </Button>
-            </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
+            <ViewToggle mode="route" />
           </div>
         </div>
         <div className="md:hidden flex flex-col gap-2">
@@ -70,18 +60,7 @@ const ListsPage = () => {
             />
           </div>
           <div className="flex items-center justify-end gap-2">
-            <Link to="/gallery">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Grid3X3 size={16} className="mr-2" />
-                Galerie
-              </Button>
-            </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
+            <ViewToggle mode="route" />
           </div>
         </div>
       </div>

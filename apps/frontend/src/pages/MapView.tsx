@@ -7,11 +7,12 @@ import { RestaurantCards } from '@/components/RestaurantCards';
 import { StoryMetadata } from '@/components/StoryMetadata';
 import { useStories } from '@/hooks/useStories';
 import { Story } from '@/types/story';
-import { X, List, Loader2, Grid3X3, Plus, Minus } from 'lucide-react';
+import { X, List, Loader2, Plus, Minus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { SearchBar } from '@/components/SearchBar';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
+import { ViewToggle } from '@/components/ViewToggle';
 
 const MapView = () => {
   const { data: stories, isLoading, error } = useStories();
@@ -69,9 +70,8 @@ const MapView = () => {
 
   const handleCloseStory = () => {
     const from = params.get('from');
-    if (from === 'gallery') {
-      // Return to gallery if entry came from there
-      navigate('/gallery');
+    if (from) {
+      navigate(decodeURIComponent(from));
       return;
     }
     setSelectedStory(null);
@@ -201,27 +201,25 @@ const MapView = () => {
             </div>
 
             {/* Center: Search Bar (responsive widths) */}
-            <div className="justify-self-center w-full md:w-[540px] lg:w-[620px] xl:w-[720px]">
+            <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
               <SearchBar
                 showFilters={filtersOpen}
                 onToggleFilters={() => setFiltersOpen(o => !o)}
               />
             </div>
 
-            {/* Right: Nav buttons */}
+            {/* Right: Nav buttons (Listes left of toggle) */}
             <div className="flex items-center justify-end gap-2">
-              <Link to="/gallery">
-                <Button variant="default" className="bg-white text-gray-900 shadow-md rounded-full">
-                  <Grid3X3 size={16} className="mr-2" />
-                  Galerie
-                </Button>
-              </Link>
               <Link to="/lists">
-                <Button variant="default" className="bg-white text-gray-900 shadow-md rounded-full">
+                <Button
+                  variant="default"
+                  className="bg-white text-gray-900 rounded-full border border-black/10 shadow-md h-8 px-3 py-4 text-sm"
+                >
                   <List size={16} className="mr-2" />
                   Listes
                 </Button>
               </Link>
+              <ViewToggle mode="route" />
             </div>
           </div>
 
@@ -251,18 +249,13 @@ const MapView = () => {
                 </Button>
               </div>
               <div className="flex items-center gap-2">
-                <Link to="/gallery">
-                  <Button variant="default" className="bg-white text-gray-900 shadow-md">
-                    <Grid3X3 size={16} className="mr-2" />
-                    Galerie
-                  </Button>
-                </Link>
                 <Link to="/lists">
-                  <Button variant="default" className="bg-white text-gray-900 shadow-md">
+                  <Button variant="default" className="bg-white text-gray-900 rounded-full border border-black/10 shadow-md h-8 px-3 py-4 text-sm">
                     <List size={16} className="mr-2" />
                     Listes
                   </Button>
                 </Link>
+                <ViewToggle mode="route" />
               </div>
             </div>
           </div>

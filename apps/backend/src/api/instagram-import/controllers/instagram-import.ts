@@ -225,6 +225,8 @@ type ImportStats = {
   usernamesTouched: string[];
 };
 
+let CURRENT_AUTHOR_ID: number | undefined;
+
 const processCategory = async (
   strapi: any,
   cat: any,
@@ -232,7 +234,6 @@ const processCategory = async (
   touchedArticleIds: Set<number>,
   stats: ImportStats,
   onProgress?: (uploaded: number, total: number, msg?: string) => void,
-  authorId?: number,
 ) => {
   const looksMojibake = (s: string) => /[ÂÃ]|â[€€™“”]/.test(s);
   const fixMojibake = (s: string) => {
@@ -396,7 +397,7 @@ const processCategory = async (
               taken_at: visitDate.toISOString(),
               media: createdFile?.id ? { connect: [createdFile.id] } : undefined,
               publishedAt: new Date().toISOString(),
-              ...(authorId ? { author: authorId } : {}),
+              ...(CURRENT_AUTHOR_ID ? { author: CURRENT_AUTHOR_ID } : {}),
             },
           });
         } else {
@@ -407,7 +408,7 @@ const processCategory = async (
           createdEntity = entity;
         }
         // Ensure author is set on post/reel if provided
-        try { if (authorId) await strapi.entityService.update(contentType, (createdEntity as any).id, { data: { author: authorId } }); } catch {}
+        try { if (CURRENT_AUTHOR_ID) await strapi.entityService.update(contentType, (createdEntity as any).id, { data: { author: CURRENT_AUTHOR_ID } }); } catch {}
         // Generate thumbnails for Posts/Reels when applicable
         try {
           const publicDir = (strapi.dirs && (strapi.dirs as any).public) || path.join(process.cwd(), 'public');
@@ -466,13 +467,13 @@ const processCategory = async (
           if (!article) {
             try {
               article = await strapi.entityService.create('api::article.article', {
-                data: { username: uname, title: uname, slug: uname.replace(/^@/, ''), publishedAt: new Date().toISOString(), ...(authorId ? { author: authorId } : {}) },
+                data: { username: uname, title: uname, slug: uname.replace(/^@/, ''), publishedAt: new Date().toISOString(), ...(CURRENT_AUTHOR_ID ? { author: CURRENT_AUTHOR_ID } : {}) },
               });
               if (article?.id) touchedArticleIds.add(article.id);
             } catch {}
           }
           // Ensure author is set if provided
-          try { if (authorId) await strapi.entityService.update('api::article.article', article.id, { data: { author: authorId } }); } catch {}
+          try { if (CURRENT_AUTHOR_ID) await strapi.entityService.update('api::article.article', article.id, { data: { author: CURRENT_AUTHOR_ID } }); } catch {}
           try {
             const relField = isPosts ? 'posts' : 'reels';
             await strapi.entityService.update('api::article.article', article.id, {
@@ -491,39 +492,39 @@ const processCategory = async (
         const found = await strapi.entityService.findMany('api::article.article', { filters: { username: uname }, limit: 1 });
         const baseName = targetName.replace(/\.[^.]+$/, '');
         let article = (found && found[0]) ? found[0] : null;
-        if (!article) {
-          try {
-            article = await strapi.entityService.create('api::article.article', {
-              data: {
-                username: uname,
-                title: uname,
-                slug: uname.replace(/^@/, ''),
-                description: title || '',
-                cover: createdFile?.id ? { connect: [createdFile.id] } : undefined,
-                publishedAt: new Date().toISOString(),
-                ...(authorId ? { author: authorId } : {}),
-              },
-            });
-            if (article?.id) { touchedArticleIds.add(article.id); stats.articlesCreated += 1; }
-            if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Création de l’article pour ${uname}…`);
-          } catch (e) {
-            // Retry without description if it violates constraints
-            article = await strapi.entityService.create('api::article.article', {
-              data: {
-                username: uname,
-                title: uname,
-                slug: uname.replace(/^@/, ''),
-                cover: createdFile?.id ? { connect: [createdFile.id] } : undefined,
-                publishedAt: new Date().toISOString(),
-                ...(authorId ? { author: authorId } : {}),
-              },
-            });
-            if (article?.id) { touchedArticleIds.add(article.id); stats.articlesCreated += 1; }
-            if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Création de l’article pour ${uname}…`);
+          if (!article) {
+            try {
+              article = await strapi.entityService.create('api::article.article', {
+                data: {
+                  username: uname,
+                  title: uname,
+                  slug: uname.replace(/^@/, ''),
+                  description: title || '',
+                  cover: createdFile?.id ? { connect: [createdFile.id] } : undefined,
+                  publishedAt: new Date().toISOString(),
+                  ...(CURRENT_AUTHOR_ID ? { author: CURRENT_AUTHOR_ID } : {}),
+                },
+              });
+              if (article?.id) { touchedArticleIds.add(article.id); stats.articlesCreated += 1; }
+              if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Création de l’article pour ${uname}…`);
+            } catch (e) {
+              // Retry without description if it violates constraints
+              article = await strapi.entityService.create('api::article.article', {
+                data: {
+                  username: uname,
+                  title: uname,
+                  slug: uname.replace(/^@/, ''),
+                  cover: createdFile?.id ? { connect: [createdFile.id] } : undefined,
+                  publishedAt: new Date().toISOString(),
+                  ...(CURRENT_AUTHOR_ID ? { author: CURRENT_AUTHOR_ID } : {}),
+                },
+              });
+              if (article?.id) { touchedArticleIds.add(article.id); stats.articlesCreated += 1; }
+              if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Création de l’article pour ${uname}…`);
+            }
           }
-        }
         // Ensure author set on existing article
-        try { if (authorId) await strapi.entityService.update('api::article.article', article.id, { data: { author: authorId } }); } catch {}
+        try { if (CURRENT_AUTHOR_ID) await strapi.entityService.update('api::article.article', article.id, { data: { author: CURRENT_AUTHOR_ID } }); } catch {}
         // Ensure article is published
         try {
           if (!(article as any)?.publishedAt) {
@@ -700,7 +701,11 @@ export default {
                 const slug = authorName.replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_\-]+/g, '-').replace(/^-+|-+$/g, '');
                 author = await strapi.entityService.create('api::author.author', { data: { name: authorName, slug } });
               }
-              authorId = author?.id;
+              {
+                const aid = Number((author as any)?.id);
+                authorId = Number.isFinite(aid) ? aid : undefined;
+                CURRENT_AUTHOR_ID = authorId;
+              }
               // Load latest profile photo and upload to Profiles/; only set author.avatar if not already set
               const profileJson = path.join(mediaDir, 'profile_photos.json');
               if (await fileExists(profileJson)) {
@@ -802,7 +807,6 @@ export default {
               touched,
               stats,
               onProgress,
-              authorId,
             );
           }
 
@@ -899,7 +903,11 @@ export default {
                 const slug = authorName.replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_\-]+/g, '-').replace(/^-+|-+$/g, '');
                 author = await strapi.entityService.create('api::author.author', { data: { name: authorName, slug } });
               }
-          authorId = author?.id;
+              {
+                const aid = Number((author as any)?.id);
+                authorId = Number.isFinite(aid) ? aid : undefined;
+                CURRENT_AUTHOR_ID = authorId;
+              }
           const profileJson = path.join(mediaDir, 'profile_photos.json');
           if (await fileExists(profileJson)) {
             const txt = await fs.promises.readFile(profileJson, 'utf8');
@@ -940,7 +948,7 @@ export default {
         stats.categories.push(key);
         stats.jsonFound.push({ key, path: jsonPath });
         try { ctx.strapi.log.info(`[ig-import] using json for ${key}: ${jsonPath}`); } catch {}
-        await processCategory(strapi, { key, json: jsonPath, folderName: key.charAt(0).toUpperCase() + key.slice(1) }, defaultUser, touched, stats, undefined, authorId);
+        await processCategory(strapi, { key, json: jsonPath, folderName: key.charAt(0).toUpperCase() + key.slice(1) }, defaultUser, touched, stats, undefined);
       }
 
       // After import, refresh only articles that received new media/cover

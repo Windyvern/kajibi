@@ -42,8 +42,9 @@ services:
       dockerfile: Dockerfile
       args:
         # These are used at build time and baked into the JS bundle
+        # Point both API and assets to the proxy to avoid CORS in dev
         VITE_API_BASE: http://localhost:4000
-        VITE_STRAPI_URL: http://localhost:1337
+        VITE_STRAPI_URL: http://localhost:4000
     env_file: ./apps/frontend/.env.local
     ports:
       - "3000:3000"

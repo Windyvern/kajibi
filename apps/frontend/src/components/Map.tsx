@@ -7,6 +7,72 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import { Story } from '@/types/story';
 
+// Cache fetched SVGs by URL to avoid repeated network requests
+const svgCache: Map<string, string> = new globalThis.Map<string, string>();
+let prizeSvgCounter = 0;
+
+// Very small sanitizer for inline SVGs coming from our CMS
+function sanitizeSvg(raw: string): string {
+  try {
+    // Remove XML/DOCTYPE and comments
+    let s = raw
+      .replace(/<\?xml[^>]*\?>/gi, '')
+      .replace(/<!DOCTYPE[\s\S]*?>/gi, '')
+      .replace(/<!--([\s\S]*?)-->/g, '')
+      .trim();
+    // Keep only the first <svg>...</svg> block
+    const match = s.match(/<svg[\s\S]*?<\/svg>/i);
+    s = match ? match[0] : s;
+    // Strip script tags
+    s = s.replace(/<script[\s\S]*?<\/script>/gi, '');
+    // Remove inline event handlers like onload=, onclick=
+    s = s.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '');
+    // Neutralize javascript: URLs in href/xlink:href
+    s = s.replace(/(href|xlink:href)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, '$1=""');
+    return s;
+  } catch {
+    return '';
+  }
+}
+
+function isSvgUrl(url?: string) {
+  return typeof url === 'string' && /\.svg(\?|#|$)/i.test(url);
+}
+
+function inlinePrizeSvg(svgRaw: string, fillColor: string, strokeColor = '#ffffff', strokeWidth = 3) {
+  try {
+    const safe = sanitizeSvg(svgRaw);
+    const clsUnique = `prize-svg-${++prizeSvgCounter}`;
+    // Inject a style to force fill and stroke on shapes, preserving viewBox
+    const styled = safe.replace(
+      /<svg(\b[^>]*)>/i,
+      (m, attrs) => {
+        // Ensure a unique class on the root svg to hard-scope styles
+        const hasClass = /\bclass=/.test(attrs);
+        const newAttrs = hasClass
+          ? attrs.replace(/class=(['"])([^'"]*)(['"])/, (mm, q1, classes, q2) => `class=${q1}${classes} prize-svg ${clsUnique}${q2}`)
+          : `${attrs} class="prize-svg ${clsUnique}"`;
+        return `
+<svg${newAttrs} width="40" height="40" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .${clsUnique} path, .${clsUnique} circle, .${clsUnique} rect, .${clsUnique} polygon, .${clsUnique} polyline, .${clsUnique} ellipse, .${clsUnique} line, .${clsUnique} g, .${clsUnique} use {
+      fill: ${fillColor} !important;
+      stroke: ${strokeColor} !important;
+      stroke-width: ${strokeWidth}px !important;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      paint-order: stroke fill;
+      vector-effect: non-scaling-stroke;
+    }
+  </style>`;
+      }
+    );
+    return `<div class="prize-badge">${styled}</div>`;
+  } catch {
+    return '';
+  }
+}
+
 // Fix for default markers in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -93,6 +159,31 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         align-items: center;
         transition: transform 0.2s ease;
       }
+      .marker-container .prize-badge {
+        position: absolute;
+        top: -14px;
+        right: -14px;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+        background: transparent;
+        border: none;
+        filter: drop-shadow(0 6px 10px rgba(0,0,0,0.25));
+      }
+      .marker-container .prize-badge .icon {
+        width: 40px;
+        height: 40px;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        display: inline-block;
+      }
       .marker-frame {
         display: inline-block;
         background: none;
@@ -128,7 +219,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         background: none;
         width: 96px;
         height: 170px;
-        margin-top: 5px;
+        margin-top: 0px;
         margin-bottom: 0px;
         max-width: 100%;
         max-height: 100%;
@@ -153,6 +244,10 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         border-left: 5px solid transparent;
         border-right: 5px solid transparent;
         border-top: 10px solid #fff;
+      }
+      .marker-container .marker-frame.selected + .arrow {
+        border-top-color: #3b82f6;
+        filter: drop-shadow(0 6px 20px rgba(59, 130, 246, 0.4));
       }
       .cluster-counter {
         position: absolute;
@@ -212,14 +307,30 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     stories.forEach((story) => {
       if (!story.geo) return;
 
-      const thumbnailPanel = story.panels.find(p => p.id === story.thumbnailPanelId) || story.panels[0];
-      const thumbnailUrl = thumbnailPanel?.media || null;
+      // Prefer provided story.thumbnail (guaranteed image), else first image panel
+      const firstImagePanel = story.panels.find(p => p.type === 'image');
+      const thumbnailUrl = story.thumbnail || firstImagePanel?.media || null;
 
       const isSelected = story.id === selectedStoryId;
+      const prize = Array.isArray(story.prizes) && story.prizes.length > 0 ? story.prizes[0] : undefined;
+      const fillColor = prize ? (prize.useTextColor ? (prize.textColor || '#111') : (prize.bgColor || '#111')) : undefined;
+      let prizeHtml = '';
+      if (prize && prize.iconUrl) {
+        if (isSvgUrl(prize.iconUrl) && svgCache.has(prize.iconUrl)) {
+          prizeHtml = inlinePrizeSvg(svgCache.get(prize.iconUrl) || '', fillColor || '#111');
+        } else {
+          // Fallback to CSS-mask until SVG is fetched
+          prizeHtml = `
+            <div class="prize-badge">
+              <span class="icon" style="background-color: ${fillColor || '#111'}; -webkit-mask-image: url(${prize.iconUrl}); mask-image: url(${prize.iconUrl});"></span>
+            </div>`;
+        }
+      }
 
       const markerIcon = L.divIcon({
         html: `
           <div class="marker-container">
+            ${prizeHtml}
             <div class="marker-frame ${isSelected ? 'selected' : ''}" data-story-id="${story.id}">
               ${thumbnailUrl 
                 ? `<img src="${thumbnailUrl}" alt="${story.title}" />` 
@@ -251,6 +362,30 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       });
 
       markersRef.current.addLayer(marker);
+
+      // If prize is an SVG and not cached yet, fetch and inline it to get true stroke + shadow
+      if (prize && isSvgUrl(prize.iconUrl) && !svgCache.has(prize.iconUrl!)) {
+        fetch(prize.iconUrl!)
+          .then(async (r) => {
+            const ct = r.headers.get('content-type') || '';
+            if (!ct.includes('svg')) {
+              // Still attempt to read text; some servers omit content-type
+              return r.text();
+            }
+            return r.text();
+          })
+          .then((text) => {
+            if (!text) return;
+            svgCache.set(prize.iconUrl!, text);
+            const el = marker.getElement();
+            if (!el) return;
+            const badge = el.querySelector('.prize-badge');
+            if (badge) {
+              badge.outerHTML = inlinePrizeSvg(text, fillColor || '#111');
+            }
+          })
+          .catch(() => {});
+      }
     });
   }, [stories, onStorySelect, selectedStoryId]);
 

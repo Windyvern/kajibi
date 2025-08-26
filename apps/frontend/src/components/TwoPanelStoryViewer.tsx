@@ -425,6 +425,7 @@ export const TwoPanelStoryViewer = ({
           currentProgress={panelProgress}
           storyTitle={currentStory.title}
           author={currentStory.author}
+          authorSlug={currentStory.authorSlug}
           uploaderName={currentStory.username}
           dateText={(() => {
             const media = currentPanel?.media || '';

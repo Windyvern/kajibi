@@ -1,17 +1,22 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Map, List as ListIcon } from 'lucide-react';
+import { List as ListIcon } from 'lucide-react';
 import { SearchBar } from '@/components/SearchBar';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuthors } from '@/hooks/useAuthors';
 import { useStories } from '@/hooks/useStories';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
 import { useAuthorPosts, useAuthorReels } from '@/hooks/useAuthorMedia';
+import { ViewToggle } from '@/components/ViewToggle';
+import { Map as StoriesMap } from '@/components/Map';
 
 const AuthorDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const style = params.get('style') === 'map' ? 'map' : 'gallery';
   const { data: authors, isLoading: aLoading, error: aError } = useAuthors();
   const { data: stories, isLoading: sLoading, error: sError } = useStories();
 
@@ -23,6 +28,19 @@ const AuthorDetailPage = () => {
   const { data: posts } = useAuthorPosts(author?.slug || author?.name);
   const { data: reels } = useAuthorReels(author?.slug || author?.name);
   const [tab, setTab] = useState<'stories'|'posts'|'reels'>('stories');
+  // Restore gallery scroll when returning from a story
+  useEffect(() => {
+    const key = `${location.pathname}${location.search}`;
+    try {
+      const v = sessionStorage.getItem(`scroll:${key}`);
+      if (v && style !== 'map' && tab === 'stories') {
+        window.requestAnimationFrame(() => {
+          window.scrollTo(0, parseInt(v, 10) || 0);
+          sessionStorage.removeItem(`scroll:${key}`);
+        });
+      }
+    } catch {}
+  }, [location.pathname, location.search, style, tab]);
 
   if (aLoading || sLoading) {
     return <div className="min-h-screen flex items-center justify-center"><span>Chargement…</span></div>;
@@ -37,7 +55,7 @@ const AuthorDetailPage = () => {
       <div className="px-4 md:px-6 pt-4">
         <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
           <div />
-          <div className="justify-self-center w-full md:w-[540px] lg:w-[620px] xl:w-[720px]">
+          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
             <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
           </div>
           <div className="flex items-center justify-end gap-2">
@@ -47,12 +65,7 @@ const AuthorDetailPage = () => {
                 Listes
               </Button>
             </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
+            <ViewToggle mode="query" />
           </div>
         </div>
 
@@ -67,12 +80,7 @@ const AuthorDetailPage = () => {
                 Listes
               </Button>
             </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
+            <ViewToggle mode="query" />
           </div>
         </div>
       </div>
@@ -108,10 +116,32 @@ const AuthorDetailPage = () => {
         </div>
       </div>
       {tab === 'stories' && (
-        <LatestArticlesGallery
-          stories={authorStories}
-          onSelect={(story) => navigate(`/story/${encodeURIComponent(story.handle || story.id)}?from=authors`)}
-        />
+        style === 'map' ? (
+          <div className="h-[70vh] w-full">
+            <StoriesMap
+              stories={authorStories}
+              onStorySelect={(story) => {
+                const current = `${location.pathname}${location.search}`;
+                const base = `/story/${encodeURIComponent(story.handle || story.id)}`;
+                navigate(`${base}?from=${encodeURIComponent(current)}`);
+              }}
+              selectedStoryId={undefined}
+              center={{ lat: 48.8566, lng: 2.3522 }}
+              zoom={4}
+              onViewChange={() => {}}
+              fitPadding={40}
+            />
+          </div>
+        ) : (
+          <LatestArticlesGallery
+            stories={authorStories}
+            onSelect={(story) => {
+              const current = `${location.pathname}${location.search}`;
+              try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}
+              navigate(`/story/${encodeURIComponent(story.handle || story.id)}?from=${encodeURIComponent(current)}`);
+            }}
+          />
+        )
       )}
       {tab !== 'stories' && (
         <div className="p-6">

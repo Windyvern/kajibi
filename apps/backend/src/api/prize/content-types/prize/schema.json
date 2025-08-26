@@ -23,6 +23,15 @@
       "customField": "plugin::color-picker.color",
       "options": { "format": "hex" }
     },
+    "use_text_color": {
+      "type": "boolean",
+      "default": false
+    },
+    "priority": {
+      "type": "integer",
+      "default": 100,
+      "min": 0
+    },
     "articles": {
       "type": "relation",
       "relation": "manyToMany",

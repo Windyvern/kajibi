@@ -16,6 +16,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Local health endpoint (does not hit upstream)
+app.get('/_health', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
 // Optional API token: allow public GET/HEAD without a token so Strapi Public role applies.
 // Require a token only for write operations to avoid exposing unsafe methods.
 app.use((req, res, next) => {
@@ -27,9 +32,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Only allow proxying Strapi REST routes (prevent admin/internal access)
+// Allowlist paths to proxy (REST and public uploads). Prevent admin/internal access.
+const ALLOW_PREFIXES = ['/api', '/uploads', '/_health'];
 app.use((req, res, next) => {
-  if (!req.path.startsWith('/api')) {
+  if (!ALLOW_PREFIXES.some((p) => req.path === p || req.path.startsWith(p + '/'))) {
     return res.status(404).json({ error: 'Not found' });
   }
   next();
@@ -46,10 +52,10 @@ app.all('*', async (req, res) => {
     // Preserve content-type for body passthrough
     const contentType = req.headers['content-type'];
     if (contentType) headers.set('content-type', contentType);
-    // Only attach Authorization for non-read operations; reads use Strapi Public role
     const method = req.method.toUpperCase();
     const isRead = method === 'GET' || method === 'HEAD';
-    if (!isRead && TOKEN) headers.set('authorization', `Bearer ${TOKEN}`);
+    // Attach Authorization for all methods when token is provided
+    if (TOKEN) headers.set('authorization', `Bearer ${TOKEN}`);
 
     const hasBody = !isRead && req.body && req.body.length > 0;
 

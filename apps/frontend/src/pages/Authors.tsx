@@ -27,7 +27,7 @@ const AuthorsPage = () => {
       <div className="px-4 md:px-6 pt-4">
         <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
           <div />
-          <div className="justify-self-center w-full md:w-[540px] lg:w-[620px] xl:w-[720px]">
+          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
             <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
           </div>
           <div className="flex items-center justify-end gap-2">

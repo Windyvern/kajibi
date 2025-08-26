@@ -16,6 +16,7 @@ export interface Story {
   id: string;
   title: string;
   author: string;
+  authorSlug?: string;
   subtitle?: string;
   handle?: string;
   publishedAt: string;
@@ -39,6 +40,8 @@ export interface Story {
     iconUrl?: string;
     textColor?: string;
     bgColor?: string;
+    priority?: number;
+    useTextColor?: boolean;
   }>;
   username?: string;
   avatarUrl?: string;

@@ -143,10 +143,10 @@ export const useStories = () => {
         const imagePanel = panels.find(p => p.type === 'image' || p.type === 'video');
 
         // Map prizes (support v4 and v5 shapes)
-        const prizesList: Array<{ id: string; name: string; slug?: string; iconUrl?: string; textColor?: string; bgColor?: string }> = (() => {
+        const prizesList: Array<{ id: string; name: string; slug?: string; iconUrl?: string; textColor?: string; bgColor?: string; priority?: number; useTextColor?: boolean }> = (() => {
           const src = attrs.prizes?.data ?? attrs.prizes ?? attrs.awards ?? [];
           const arr = Array.isArray(src) ? src : [];
-          return arr.map((p: any) => {
+          const mapped = arr.map((p: any) => {
             const entry = p?.attributes ? p : { attributes: p, id: p?.id };
             const at = entry?.attributes || {};
             return {
@@ -156,8 +156,20 @@ export const useStories = () => {
               iconUrl: getMediaUrl(at.icon),
               textColor: at.text_color || at.textColor || undefined,
               bgColor: at.bg_color || at.bgColor || undefined,
+              priority: typeof at.priority === 'number' ? at.priority : 100,
+              useTextColor: Boolean(at.use_text_color ?? at.useTextColor ?? false),
             };
           }).filter((x: any) => x && x.name);
+          // Sort by priority asc (lower = higher priority), then by name desc
+          mapped.sort((a, b) => {
+            const pa = typeof a.priority === 'number' ? a.priority : 100;
+            const pb = typeof b.priority === 'number' ? b.priority : 100;
+            if (pa !== pb) return pa - pb;
+            const an = a.name || '';
+            const bn = b.name || '';
+            return bn.localeCompare(an, undefined, { numeric: true, sensitivity: 'base' });
+          });
+          return mapped;
         })();
 
         // Derive primary type label and all type names
@@ -176,10 +188,17 @@ export const useStories = () => {
             .filter((n: any) => typeof n === 'string' && n.trim().length > 0);
         })();
 
+        // Normalize author relation across Strapi shapes
+        const authorEntry = attrs.author?.data?.attributes || attrs.author?.attributes || attrs.author || {};
+        const authorName: string = authorEntry?.name || attrs.author?.name || (attrs.username || '');
+        const authorSlug: string | undefined = authorEntry?.slug || attrs.author?.slug || undefined;
+        const authorAvatarUrl = getMediaUrl(authorEntry?.avatar) || getMediaUrl(attrs.avatar);
+
         return {
           id: article.id.toString(),
           title: attrs.title,
-          author: attrs.author?.data?.attributes?.name || attrs.author?.name || (attrs.username || ''),
+          author: authorName,
+          authorSlug,
           subtitle: undefined,
           handle: attrs.slug,
           publishedAt: attrs.publishedAt || attrs.createdAt,
@@ -195,11 +214,7 @@ export const useStories = () => {
           types: typeNames.length ? typeNames : undefined,
           prizes: prizesList.length ? prizesList : undefined,
           username: attrs.username || undefined,
-          avatarUrl: (() => {
-            const a = attrs.author?.data?.attributes;
-            const fromAuthor = getMediaUrl(a?.avatar);
-            return fromAuthor || getMediaUrl(attrs.avatar);
-          })(),
+          avatarUrl: authorAvatarUrl,
           lists: Array.isArray(attrs.lists)
             ? attrs.lists.map((l: any) => ({
                 id: String(l.id || l.documentId || ''),

@@ -70,6 +70,26 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryM
             </a>
           </p>
         )}
+        {/* Type and prizes just below the username */}
+        {(() => {
+          const typeText = Array.isArray(story.types) && story.types.length > 0
+            ? story.types.join(', ')
+            : (story.category || (story as any).type);
+          return (
+            <>
+              {typeText && (
+                <p className="italic text-gray-700 mb-2">{typeText}</p>
+              )}
+              {Array.isArray(story.prizes) && story.prizes.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {story.prizes.map((p) => (
+                    <PrizeCapsule key={p.id} name={p.name} iconUrl={p.iconUrl} textColor={p.textColor} bgColor={p.bgColor} />
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
         {story.address && (
           <div className="flex items-center text-gray-500 text-sm mb-4">
             <MapPin size={14} className="mr-1" />
@@ -180,3 +200,36 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryM
     </div>
   );
 };
+
+function PrizeCapsule({ name, iconUrl, textColor, bgColor }: { name: string; iconUrl?: string; textColor?: string; bgColor?: string }) {
+  const color = textColor || '#111111';
+  const bg = bgColor || 'rgba(255,255,255,0.85)';
+  const size = 20;
+  return (
+    <span
+      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold"
+      style={{ color, backgroundColor: bg, border: '1px solid rgba(0,0,0,0.06)' }}
+    >
+      {iconUrl ? (
+        <span
+          aria-hidden
+          style={{
+            width: size,
+            height: size,
+            backgroundColor: 'currentColor',
+            WebkitMaskImage: `url(${iconUrl})`,
+            maskImage: `url(${iconUrl})`,
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+            display: 'inline-block',
+          }}
+        />
+      ) : null}
+      <span>{name}</span>
+    </span>
+  );
+}
