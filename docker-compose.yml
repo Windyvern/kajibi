@@ -24,6 +24,8 @@ services:
       STRAPI_ADMIN_WATCH: "true"
     ports:
       - "1337:1337"
+      # Expose Strapi admin Vite dev server for hot reload during `develop`
+      - "5173:5173"
     volumes:
       - ./apps/backend:/opt/app
       # Prevent host node_modules (darwin) from shadowing container's (linux)
@@ -40,8 +42,9 @@ services:
       dockerfile: Dockerfile
       args:
         # These are used at build time and baked into the JS bundle
+        # Point both API and assets to the proxy to avoid CORS in dev
         VITE_API_BASE: http://localhost:4000
-        VITE_STRAPI_URL: http://localhost:1337
+        VITE_STRAPI_URL: http://localhost:4000
     env_file: ./apps/frontend/.env.local
     ports:
       - "3000:3000"

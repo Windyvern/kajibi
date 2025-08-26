@@ -15,6 +15,11 @@
     "name": {
       "type": "string"
     },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": false
+    },
     "avatar": {
       "type": "media",
       "multiple": false,
@@ -32,6 +37,18 @@
       "type": "relation",
       "relation": "oneToMany",
       "target": "api::article.article",
+      "mappedBy": "author"
+    },
+    "posts": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::post.post",
+      "mappedBy": "author"
+    },
+    "reels": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::reel.reel",
       "mappedBy": "author"
     }
   }

@@ -61,6 +61,10 @@
         "shared.media"
       ]
     },
+    "location": {
+      "type": "json",
+      "customField": "plugin::google-maps.location-picker"
+    },
     "latitude": {
       "type": "float",
       "precision": 9,

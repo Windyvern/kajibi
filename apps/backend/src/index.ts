@@ -389,6 +389,24 @@ export default {
   },
 
   async bootstrap({ strapi }: any) {
+    // Ensure Google Maps plugin has sensible defaults for Paris
+    try {
+      const cfgUid = 'plugin::google-maps.config';
+      const existing = await strapi.entityService.findMany(cfgUid, { fields: ['id', 'defaultLatitude', 'defaultLongitude'] });
+      if (!existing || !existing.id) {
+        await strapi.db.query(cfgUid).create({ data: { defaultLatitude: '48.8566', defaultLongitude: '2.3522' } });
+      } else {
+        const dl = existing.defaultLatitude || '';
+        const dln = existing.defaultLongitude || '';
+        if (!dl || !dln) {
+          await strapi.db.query(cfgUid).update({ where: { id: existing.id }, data: {
+            defaultLatitude: dl || '48.8566',
+            defaultLongitude: dln || '2.3522',
+          } });
+        }
+      }
+    } catch {}
+
     strapi.db.lifecycles.subscribe({
       models: ['plugin::upload.file'],
       async afterCreate(event: any) {

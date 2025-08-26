@@ -16,6 +16,7 @@ export interface Story {
   id: string;
   title: string;
   author: string;
+  authorSlug?: string;
   subtitle?: string;
   handle?: string;
   publishedAt: string;
@@ -25,6 +26,23 @@ export interface Story {
   thumbnail?: string;
   thumbnailPanelId?: string; // Which panel to use as map marker
   rating?: number;
+  // Optional shop category (e.g., Café, Glacier, Restaurant thaïlandais)
+  category?: string;
+  // Optional primary type label (legacy single-type field)
+  type?: string;
+  // Optional type labels (from types taxonomy)
+  types?: string[];
+  // Optional prize tags; UI shows up to 3 badges if present
+  prizes?: Array<{
+    id: string;
+    name: string;
+    slug?: string;
+    iconUrl?: string;
+    textColor?: string;
+    bgColor?: string;
+    priority?: number;
+    useTextColor?: boolean;
+  }>;
   username?: string;
   avatarUrl?: string;
   tags?: string[];

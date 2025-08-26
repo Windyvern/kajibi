@@ -12,6 +12,22 @@ const StoryPage = () => {
   const [params] = useSearchParams();
   const initialPanelId = params.get('panel') || undefined;
 
+  // Track viewport for conditional rendering (avoid double-mount viewers)
+  const [isMdUp, setIsMdUp] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && 'matchMedia' in window) {
+      return window.matchMedia('(min-width: 768px)').matches;
+    }
+    return false;
+  });
+  useEffect(() => {
+    if (!(typeof window !== 'undefined' && 'matchMedia' in window)) return;
+    const mql = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setIsMdUp(mql.matches);
+    try { mql.addEventListener('change', onChange); } catch { mql.addListener(onChange); }
+    onChange();
+    return () => { try { mql.removeEventListener('change', onChange); } catch { mql.removeListener(onChange); } };
+  }, []);
+
   const target = useMemo(() => {
     if (!stories || !slug) return null;
     return stories.find((s) => (s.handle || '').toLowerCase() === slug.toLowerCase()) || null;
@@ -41,7 +57,11 @@ const StoryPage = () => {
   // Close with Escape key
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') navigate('/gallery');
+      if (e.key === 'Escape') {
+        const p = new URLSearchParams(window.location.search);
+        const from = p.get('from');
+        if (from) navigate(decodeURIComponent(from)); else navigate('/gallery');
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -66,23 +86,6 @@ const StoryPage = () => {
   }
   if (!target) return null;
 
-  // Track viewport for conditional rendering (avoid double-mount viewers)
-  const [isMdUp, setIsMdUp] = useState<boolean>(() => {
-    if (typeof window !== 'undefined' && 'matchMedia' in window) {
-      return window.matchMedia('(min-width: 768px)').matches;
-    }
-    return false;
-  });
-  useEffect(() => {
-    if (!(typeof window !== 'undefined' && 'matchMedia' in window)) return;
-    const mql = window.matchMedia('(min-width: 768px)');
-    const onChange = () => setIsMdUp(mql.matches);
-    // modern
-    try { mql.addEventListener('change', onChange); } catch { mql.addListener(onChange); }
-    onChange();
-    return () => { try { mql.removeEventListener('change', onChange); } catch { mql.removeListener(onChange); } };
-  }, []);
-
   // Non-geo: center viewer + description on desktop; keep full-screen viewer on mobile
   return (
     <div className="fixed inset-0 z-50 bg-black">
@@ -96,7 +99,11 @@ const StoryPage = () => {
                 initialStoryId={target.id}
                 initialPanelId={initialPanelId}
                 stories={stories}
-                onClose={() => navigate('/gallery')}
+                onClose={() => {
+                  const p = new URLSearchParams(window.location.search);
+                  const from = p.get('from');
+                  if (from) navigate(decodeURIComponent(from)); else navigate('/gallery');
+                }}
                 hideRightPanel
                 hideMetadataPanel
               />
@@ -104,7 +111,11 @@ const StoryPage = () => {
           </div>
           <div className="bg-white relative">
             <button
-              onClick={() => navigate('/gallery')}
+              onClick={() => {
+                const p = new URLSearchParams(window.location.search);
+                const from = p.get('from');
+                if (from) navigate(decodeURIComponent(from)); else navigate('/gallery');
+              }}
               className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center"
               aria-label="Fermer"
             >
@@ -125,7 +136,11 @@ const StoryPage = () => {
           initialStoryId={target.id}
           initialPanelId={initialPanelId}
           stories={stories}
-          onClose={() => navigate('/gallery')}
+          onClose={() => {
+            const p = new URLSearchParams(window.location.search);
+            const from = p.get('from');
+            if (from) navigate(decodeURIComponent(from)); else navigate('/gallery');
+          }}
         />
       )}
     </div>

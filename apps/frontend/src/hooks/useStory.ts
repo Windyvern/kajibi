@@ -130,7 +130,11 @@ function mapArticleToStory(article: any): Story {
     thumbnailPanelId: imagePanel?.id,
     rating: attrs.rating != null ? Number(attrs.rating) : undefined,
     username: attrs.username || undefined,
-    avatarUrl: getMediaUrl(attrs.avatar),
+    avatarUrl: (() => {
+      const a = attrs.author?.data?.attributes;
+      const fromAuthor = getMediaUrl(a?.avatar);
+      return fromAuthor || getMediaUrl(attrs.avatar);
+    })(),
     tags: undefined,
     address: attrs.address || undefined,
     description: attrs.description,
@@ -152,8 +156,12 @@ export const useStory = (storyId: string) => {
     queryFn: async (): Promise<Story | null> => {
       const response = await strapiFetch<any>(
         `/api/articles/${storyId}`,
-        // Populate author, cover, media, lists (with cover), and blocks
-        'populate%5Bauthor%5D=true&populate%5Bcover%5D=true&populate%5Bmedia%5D=true&populate%5Blists%5D%5Bpopulate%5D=cover&populate%5Bblocks%5D%5Bpopulate%5D=*'
+        // Populate author (with avatar), cover, media, lists (with cover), and blocks
+        'populate%5Bauthor%5D%5Bpopulate%5D=avatar' +
+          '&populate%5Bcover%5D=true' +
+          '&populate%5Bmedia%5D=true' +
+          '&populate%5Blists%5D%5Bpopulate%5D=cover' +
+          '&populate%5Bblocks%5D%5Bpopulate%5D=*'
       );
       if (!response.data) return null;
       return mapArticleToStory(response.data);

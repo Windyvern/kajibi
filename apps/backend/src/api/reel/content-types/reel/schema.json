@@ -14,6 +14,11 @@
     "taken_at": { "type": "datetime" },
     "source": { "type": "string", "default": "instagram" },
     "source_id": { "type": "string", "unique": true },
+    "author": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::author.author"
+    },
     "media": {
       "type": "media",
       "multiple": true,

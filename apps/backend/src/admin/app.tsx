@@ -691,3 +691,64 @@ export default {
     } catch {}
   },
 };
+
+// Replace the Google Maps field's Reset button with an "Apply location" button
+// that copies the coordinates and address into the Article latitude/longitude/address fields.
+(() => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const setNative = (el: HTMLInputElement | HTMLTextAreaElement | null, val: string) => {
+    if (!el) return;
+    const proto = (el as any).__proto__ || Object.getPrototypeOf(el);
+    const desc = Object.getOwnPropertyDescriptor(proto, 'value') || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    try { desc?.set?.call(el, val); } catch { (el as any).value = val as any; }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  const applyLocation = () => {
+    try {
+      const latInput = document.querySelector('input[aria-label="Latitude"]') as HTMLInputElement | null;
+      const lngInput = document.querySelector('input[aria-label="Longtitude"]') as HTMLInputElement | null;
+      const addrInput = document.querySelector('input[placeholder="Search for a place"]') as HTMLInputElement | null;
+      const latVal = latInput ? parseFloat(latInput.value) : NaN;
+      const lngVal = lngInput ? parseFloat(lngInput.value) : NaN;
+      const addrVal = addrInput?.value || '';
+
+      const form = document.querySelector('form');
+      const aLat = form?.querySelector('input[name="latitude"]') as HTMLInputElement | null;
+      const aLng = form?.querySelector('input[name="longitude"]') as HTMLInputElement | null;
+      const aAddr = (form?.querySelector('input[name="address"], textarea[name="address"]') as any) as (HTMLInputElement | HTMLTextAreaElement | null);
+
+      if (!Number.isNaN(latVal)) setNative(aLat, String(latVal));
+      if (!Number.isNaN(lngVal)) setNative(aLng, String(lngVal));
+      if (addrVal) setNative(aAddr, addrVal);
+    } catch {}
+  };
+
+  const replaceResetWithApply = () => {
+    try {
+      // Only act on content-manager edit/create pages
+      const inCM = location.pathname.includes('/content-manager/');
+      if (!inCM) return;
+      const lng = document.querySelector('input[aria-label="Longtitude"]') as HTMLInputElement | null;
+      if (!lng) return;
+      // Search for a nearby Reset button rendered by the plugin
+      const scope = (lng.closest('[data-field]') as HTMLElement) || document;
+      const candidates = Array.from(scope.querySelectorAll('button')) as HTMLButtonElement[];
+      const target = candidates.find(b => /reset|réinitialiser/i.test((b.textContent || '').trim())) || null;
+      if (!target || (target as any)._applyLocReplaced) return;
+      // Replace the button node to remove React’s original onClick handler
+      const applyBtn = target.cloneNode(true) as HTMLButtonElement;
+      applyBtn.innerHTML = '';
+      applyBtn.appendChild(document.createTextNode('Apply location'));
+      applyBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); applyLocation(); }, true);
+      (applyBtn as any)._applyLocReplaced = true;
+      target.replaceWith(applyBtn);
+    } catch {}
+  };
+
+  const mo = new MutationObserver(() => replaceResetWithApply());
+  try { mo.observe(document.documentElement, { subtree: true, childList: true }); } catch {}
+  // Initial attempt
+  try { replaceResetWithApply(); } catch {}
+})();
