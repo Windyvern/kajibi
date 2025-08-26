@@ -88,20 +88,33 @@ interface MapProps {
   center?: { lat: number; lng: number };
   zoom?: number;
   onViewChange?: (center: { lat: number; lng: number }, zoom: number) => void;
+  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }) => void;
   fitBounds?: [[number, number], [number, number]];
   fitPadding?: number;
   suppressZoomOnMarkerClick?: boolean;
   clusterAnimate?: boolean;
   centerOffsetPixels?: { x: number; y: number };
+  clusterRadiusByZoom?: (zoom: number) => number;
 }
 
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels }: MapProps) => {
+// Assets (avatar + instagram icon)
+// Use bundler-imported assets to ensure availability
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels, clusterRadiusByZoom }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
   const lastFitKeyRef = useRef<string | null>(null);
-  // Render zone padding to keep edge markers visible
-  const renderPad = useRef<{ left: number; right: number; bottom: number; top: number }>({ left: 64, right: 64, bottom: 200, top: 0 });
+  // Render zone padding to keep edge markers visible (per spec: +60 left, +60 right, +200 top, +40 bottom)
+  const renderPad = useRef<{ left: number; right: number; bottom: number; top: number }>({ left: 60, right: 60, bottom: 40, top: 200 });
+  const defaultCenterOffset = useRef<{ x: number; y: number }>({ x: 0, y: -95 }); // center on visual middle of 190px marker
+  const lastZoomRef = useRef<number | null>(null);
+  // Lazy imports for assets (vite resolves at build time)
+  let avatarUrl: string | undefined;
+  let igUrl: string | undefined;
+  try { avatarUrl = new URL('../../../../ForCodex/117545.png', import.meta.url).toString(); } catch {}
+  try { igUrl = new URL('../../../../ForCodex/instagram.svg', import.meta.url).toString(); } catch {}
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -119,7 +132,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
     // Initialize marker cluster group
     markersRef.current = L.markerClusterGroup({
-      maxClusterRadius: 80,
+      maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function' ? clusterRadiusByZoom(z) : (z < 6 ? 80 : z < 12 ? 60 : 40)),
       animate: clusterAnimate,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
@@ -146,15 +159,44 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
   mapInstanceRef.current.addLayer(markersRef.current);
 
+    // Apply custom padding when clicking clusters (override default focus)
+    markersRef.current.on('clusterclick', (a: any) => {
+      try {
+        const b = a.layer.getBounds();
+        const padTopLeft = L.point(renderPad.current.left, renderPad.current.top);
+        const padBottomRight = L.point(renderPad.current.right, renderPad.current.bottom);
+        mapInstanceRef.current!.fitBounds(b, { paddingTopLeft: padTopLeft, paddingBottomRight: padBottomRight, animate: true });
+      } catch {}
+      a.originalEvent?.preventDefault?.();
+    });
+
     // Emit view changes to parent (e.g., to persist center/zoom across remounts)
-    if (onViewChange) {
+    if (onViewChange || onBoundsChange) {
       const emit = () => {
         const c = mapInstanceRef.current!.getCenter();
         const z = mapInstanceRef.current!.getZoom();
-        onViewChange({ lat: c.lat, lng: c.lng }, z);
+        if (onViewChange) onViewChange({ lat: c.lat, lng: c.lng }, z);
+        if (onBoundsChange) {
+          const b = mapInstanceRef.current!.getBounds();
+          onBoundsChange({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() });
+        }
       };
       mapInstanceRef.current.on('moveend', emit);
     }
+
+    // Zoom direction classes for subtle deploy/collapse animation
+    mapInstanceRef.current.on('zoomstart', () => {
+      const map = mapInstanceRef.current!;
+      const nextZoom = map.getZoom();
+      const prev = lastZoomRef.current;
+      lastZoomRef.current = nextZoom;
+      const el = mapRef.current;
+      if (!el || prev == null) return;
+      const zoomingIn = nextZoom > prev;
+      el.classList.remove('zoom-in', 'zoom-out');
+      el.classList.add(zoomingIn ? 'zoom-in' : 'zoom-out');
+      setTimeout(() => el.classList.remove('zoom-in', 'zoom-out'), 300);
+    });
 
     // Add custom CSS styles to document head
     const styleEl = document.createElement('style');
@@ -289,6 +331,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         background: transparent !important;
         border: none !important;
       }
+  /* Subtle deploy/collapse */
+  .zoom-in .custom-story-marker .marker-frame { transform: scale(0.92); opacity: 0.8; }
+  .zoom-in .custom-story-marker .marker-frame, .zoom-out .custom-story-marker .marker-frame { transition: transform 220ms ease, opacity 220ms ease; }
+  .zoom-out .custom-story-marker .marker-frame { transform: scale(1.06); opacity: 0.8; }
+  .zoom-in .custom-cluster-icon, .zoom-out .custom-cluster-icon { transition: transform 220ms ease, opacity 220ms ease; }
+  .zoom-in .custom-cluster-icon { transform: scale(0.92); opacity: 0.9; }
+  .zoom-out .custom-cluster-icon { transform: scale(1.06); opacity: 0.9; }
     `;
     document.head.appendChild(styleEl);
 
@@ -312,7 +361,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       try { map.removeLayer(markersRef.current); } catch {}
     }
     markersRef.current = L.markerClusterGroup({
-      maxClusterRadius: 80,
+      maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function' ? clusterRadiusByZoom(z) : (z < 6 ? 80 : z < 12 ? 60 : 40)),
       animate: clusterAnimate,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
@@ -339,7 +388,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     map.addLayer(markersRef.current);
     // Force markers to re-add
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clusterAnimate]);
+  }, [clusterAnimate, clusterRadiusByZoom]);
 
   useEffect(() => {
     if (!mapInstanceRef.current || !markersRef.current) return;
@@ -407,12 +456,18 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
               const latlng = map.unproject(target, z);
       map.setView(latlng, z, { animate: true });
             } else {
-      // Use panInside with padding to avoid edge cut-offs
+      // Offset center to visual middle of marker and apply padding to avoid cut-offs
       const map = mapInstanceRef.current;
-      const paddingTopLeft = L.point(renderPad.current.left, renderPad.current.top);
-      const paddingBottomRight = L.point(renderPad.current.right, renderPad.current.bottom);
-      map.setView([story.geo!.lat, story.geo!.lng], 16, { animate: true });
-      try { (map as any).panInside?.([story.geo!.lat, story.geo!.lng], { paddingTopLeft, paddingBottomRight }); } catch {}
+      const z = 16;
+      const pt = map.project([story.geo!.lat, story.geo!.lng], z);
+      const target = L.point(pt.x + defaultCenterOffset.current.x, pt.y + defaultCenterOffset.current.y);
+      const latlng = map.unproject(target, z);
+      map.setView(latlng, z, { animate: true });
+      try {
+        const paddingTopLeft = L.point(renderPad.current.left, renderPad.current.top);
+        const paddingBottomRight = L.point(renderPad.current.right, renderPad.current.bottom);
+        (map as any).panInside?.([story.geo!.lat, story.geo!.lng], { paddingTopLeft, paddingBottomRight });
+      } catch {}
             }
             if (onViewChange) {
               onViewChange({ lat: story.geo!.lat, lng: story.geo!.lng }, 16);
@@ -468,10 +523,11 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     const EPS = 1e-4; // ~11m threshold
     const needsMove = latDiff > EPS || lngDiff > EPS || zoomDiff >= 1;
     if (needsMove) {
-      if (centerOffsetPixels && typeof nextLat === 'number' && typeof nextLng === 'number') {
+      if ((centerOffsetPixels || defaultCenterOffset.current) && typeof nextLat === 'number' && typeof nextLng === 'number') {
         try {
           const pt = map.project([nextLat, nextLng], nextZoom);
-          const target = L.point(pt.x + (centerOffsetPixels.x || 0), pt.y + (centerOffsetPixels.y || 0));
+          const off = centerOffsetPixels || defaultCenterOffset.current;
+          const target = L.point(pt.x + (off.x || 0), pt.y + (off.y || 0));
           const latlng = map.unproject(target, nextZoom);
           map.setView(latlng, nextZoom, { animate: false });
         } catch {
@@ -533,7 +589,36 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
   return (
     <div className="relative w-full h-full">
-      <div ref={mapRef} className="w-full h-full" />
+      <div ref={mapRef} className="w-full h-full transition-all" />
+      {/* Bottom-left avatar and Instagram link */}
+      <div className="pointer-events-auto absolute left-4 bottom-4 flex items-center gap-3 z-[11000]">
+        <a
+          href={avatarUrl || '#'}
+          target={avatarUrl ? '_blank' : undefined}
+          rel={avatarUrl ? 'noopener noreferrer' : undefined}
+          className="shrink-0 h-12 w-12 rounded-full bg-white/90 border shadow-md flex items-center justify-center overflow-hidden"
+          aria-label="Logo"
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Logo" className="h-10 w-10 object-cover rounded-full" />
+          ) : (
+            <div className="h-10 w-10 rounded-full bg-gray-200" />
+          )}
+        </a>
+        <a
+          href="https://instagram.com/alex_kajiru"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 h-12 w-12 rounded-full bg-white/90 border shadow-md flex items-center justify-center"
+          aria-label="Instagram"
+        >
+          {igUrl ? (
+            <img src={igUrl} alt="Instagram" className="h-6 w-6" style={{ filter: 'invert(1)' }} />
+          ) : (
+            <span className="text-pink-600 font-bold">IG</span>
+          )}
+        </a>
+      </div>
     </div>
   );
 };

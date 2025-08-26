@@ -60,15 +60,15 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
   return (
     <div className="h-full overflow-y-auto p-6 bg-white">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="mb-2">
+        <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold text-gray-900">{story.title}</h1>
           {story.isClosed && (
             <span className="px-2 py-0.5 text-xs rounded-full bg-red-600 text-white">Fermé</span>
           )}
         </div>
         {story.username && !hideUsername && (
-          <p className="text-lg text-gray-600 mb-1">
+          <p className="text-lg text-gray-600">
             <a href={`https://instagram.com/${usernameHandle(story.username)}`}
                target="_blank" rel="noopener noreferrer"
                className="hover:underline">
@@ -82,24 +82,16 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
             ? story.types.join(', ')
             : (story.category || (story as any).type);
           return typeText ? (
-            <p className="italic text-gray-700 mb-2">{typeText}</p>
+            <p className="italic text-gray-700">{typeText}</p>
           ) : null;
         })()}
         {story.address && (
-          <div className="flex items-center text-gray-500 text-sm mb-4">
+          <div className="flex items-center text-gray-500 text-sm">
             <MapPin size={14} className="mr-1" />
             <span>{story.address}</span>
           </div>
         )}
-        {/* Prizes below the address */}
-        {Array.isArray(story.prizes) && story.prizes.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {story.prizes.map((p) => (
-              <PrizeCapsule key={p.id} name={p.name} iconUrl={p.iconUrl} textColor={p.textColor} bgColor={p.bgColor} />
-            ))}
-          </div>
-        )}
-        <div className="text-sm text-gray-500 space-y-1">
+        <div className="text-sm text-gray-500 space-y-1 mb-2">
           {(() => {
             const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
             if (story.postedDate) {
@@ -117,6 +109,14 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
             );
           })()}
         </div>
+        {/* Prizes below the address */}
+        {Array.isArray(story.prizes) && story.prizes.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3 ">
+            {story.prizes.map((p) => (
+              <PrizeCapsule key={p.id} name={p.name} slug={p.slug} iconUrl={p.iconUrl} textColor={p.textColor} bgColor={p.bgColor} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tags */}
@@ -135,6 +135,19 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
           </div>
         </div>
       )}
+
+
+      {/* Description */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Description</h3>
+        <div className="prose prose-sm text-gray-700">
+          {story.description ? (
+            <p>{story.description}</p>
+          ) : (
+            <p className="text-gray-500">Aucune description.</p>
+          )}
+        </div>
+      </div>
 
       {/* Lists Section (round icons, clickable). Hidden if none. */}
       {lists.length > 0 && (
@@ -164,18 +177,6 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
       )}
 
       {/* Current Panel Info - hidden for now */}
-
-      {/* Description */}
-      <div className="mb-8">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Description</h3>
-        <div className="prose prose-sm text-gray-700">
-          {story.description ? (
-            <p>{story.description}</p>
-          ) : (
-            <p className="text-gray-500">Aucune description.</p>
-          )}
-        </div>
-      </div>
 
       {/* Action Buttons */}
       <div className="flex gap-3 mb-6 relative">
@@ -207,13 +208,15 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
   );
 };
 
-function PrizeCapsule({ name, iconUrl, textColor, bgColor }: { name: string; iconUrl?: string; textColor?: string; bgColor?: string }) {
+function PrizeCapsule({ name, slug, iconUrl, textColor, bgColor }: { name: string; slug?: string; iconUrl?: string; textColor?: string; bgColor?: string }) {
   const color = textColor || '#111111';
   const bg = bgColor || 'rgba(255,255,255,0.85)';
   const size = 20;
+  const to = slug ? `/mentions/${encodeURIComponent(slug)}` : `/mentions/${encodeURIComponent(name)}`;
   return (
-    <span
-      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold"
+    <a
+      href={to}
+      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold hover:opacity-90 transition"
       style={{ color, backgroundColor: bg, border: '1px solid rgba(0,0,0,0.06)' }}
     >
       {iconUrl ? (
@@ -236,6 +239,6 @@ function PrizeCapsule({ name, iconUrl, textColor, bgColor }: { name: string; ico
         />
       ) : null}
       <span>{name}</span>
-    </span>
+    </a>
   );
 }

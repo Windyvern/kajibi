@@ -9,19 +9,39 @@
   "options": {
     "draftAndPublish": true
   },
+  "pluginOptions": {},
   "attributes": {
-    "name": { "type": "string", "required": true },
-    "slug": { "type": "uid", "targetField": "name", "required": true },
-    "icon": { "type": "media", "multiple": false, "required": false, "allowedTypes": ["images", "files"] },
-    "text_color": {
+    "name": {
       "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "icon": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": [
+        "images",
+        "files"
+      ]
+    },
+    "text_color": {
+      "type": "customField",
       "customField": "plugin::color-picker.color",
-      "options": { "format": "hex" }
+      "options": {
+        "format": "hex"
+      }
     },
     "bg_color": {
-      "type": "string",
+      "type": "customField",
       "customField": "plugin::color-picker.color",
-      "options": { "format": "hex" }
+      "options": {
+        "format": "hex"
+      }
     },
     "use_text_color": {
       "type": "boolean",
@@ -36,7 +56,19 @@
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::article.article",
+      "mappedBy": "prizes"
+    },
+    "reels": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::reel.reel",
       "inversedBy": "prizes"
+    },
+    "posts": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::post.post",
+      "mappedBy": "prizes"
     }
   }
 }

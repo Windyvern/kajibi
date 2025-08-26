@@ -110,7 +110,7 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
                 className="w-full h-full object-cover"
               />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            <div className="absolute inset-0" />
             {(panel.title || panel.content) && (
               <div className="absolute bottom-0 left-0 right-0 p-8">
                 {panel.title && (

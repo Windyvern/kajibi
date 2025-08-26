@@ -19,6 +19,7 @@ import Posts from "./pages/Posts";
 import Reels from "./pages/Reels";
 import Authors from "./pages/Authors";
 import AuthorDetail from "./pages/AuthorDetail";
+import Mentions from "./pages/Mentions";
 import { OptionsProvider } from "./context/OptionsContext";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
           <Route path="/lists/:slug/map" element={<ListMapViewer />} />
           <Route path="/authors" element={<Authors />} />
           <Route path="/authors/:slug" element={<AuthorDetail />} />
+          <Route path="/mentions/:slug" element={<Mentions />} />
           <Route path="/story/:slug" element={<Story />} />
           <Route path="/posts" element={<Posts />} />
           <Route path="/post/:slug" element={<Post />} />

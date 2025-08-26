@@ -27,10 +27,10 @@ export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onS
     );
   }
 
-  // Sort stories by published date (most recent first)
-  const sortedStories = [...stories].sort((a, b) => 
-    new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-  );
+  // Use provided order when stories are passed in; otherwise sort fetched stories by published date desc
+  const orderedStories = inputStories
+    ? stories
+    : [...stories].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
   const formatDate = (dateString: string) => {
     // French format, e.g., 12 septembre 2025
@@ -76,7 +76,6 @@ export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onS
 
   return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6 text-foreground">Stories récentes</h2>
       {/*
         Grid rules:
         - Base: 1 column
@@ -85,11 +84,13 @@ export const LatestArticlesGallery = ({ onSelect, stories: inputStories }: { onS
         - Landscape large (>=1280): 4 columns but container is capped at 1460px and centered
       */}
       <div className="w-full flex justify-center">
-  <div className="grid [@media(max-width:799px)]:grid-cols-3 [@media(max-width:1199px)]:gap-1 [@media(min-width:800px)]:grid-cols-3 [@media(min-width:1200px)]:grid-cols-4 [@media(min-width:1200px)]:gap-6 w-full xl:max-w-[1460px] mx-auto">
-          {sortedStories.map((story) => (
+    <div className="text-2xl font-bold mb-12 text-foreground">Stories récentes
+  <div className="grid [@media(max-width:1199px)]:grid-cols-3 [@media(max-width:1199px)]:gap-1 [@media(min-width:1200px)]:grid-cols-4 [@media(min-width:1200px)]:gap-2 w-full xl:max-w-[1460px] mx-auto">
+          {orderedStories.map((story) => (
             <StoryCard key={story.id} story={story} onSelect={onSelect} formatDate={formatDate} renderStars={renderStars} />
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

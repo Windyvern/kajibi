@@ -81,6 +81,22 @@ const GalleryPage = () => {
   let displayedStories = q ? filtered : baseStories;
   if (!showClosed) displayedStories = displayedStories.filter(s => !s.isClosed);
 
+  // Priority: Stories whose markers are currently within last map bounds go first
+  try {
+    const bRaw = sessionStorage.getItem('view:map:bounds');
+    if (bRaw) {
+      const b = JSON.parse(bRaw) as { north: number; south: number; east: number; west: number };
+      const inBounds: Story[] = [];
+      const outBounds: Story[] = [];
+      for (const s of displayedStories) {
+        const g = s.geo;
+        if (g && g.lat <= b.north && g.lat >= b.south && g.lng <= b.east && g.lng >= b.west) inBounds.push(s); else outBounds.push(s);
+      }
+      // Preserve internal ordering: if search is active, we preserve search rank; else leave base ordering
+      displayedStories = [...inBounds, ...outBounds];
+    }
+  } catch {}
+
   const listTitle = (() => {
     if (listParam) {
       for (const s of stories || []) {

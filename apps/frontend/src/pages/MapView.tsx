@@ -28,6 +28,17 @@ const MapView = () => {
   const [showMobileList, setShowMobileList] = useState(false);
   // Initial /map view to show France (left) and Japan (right) with margins per layout
   const computeInitialView = () => {
+    try {
+      const savedC = sessionStorage.getItem('view:map:center');
+      const savedZ = sessionStorage.getItem('view:map:zoom');
+      if (savedC && savedZ) {
+        const c = JSON.parse(savedC);
+        const z = parseInt(savedZ, 10);
+        if (c && typeof c.lat === 'number' && typeof c.lng === 'number' && !Number.isNaN(z)) {
+          return { center: c, zoom: z };
+        }
+      }
+    } catch {}
     const aspect = window.innerWidth / window.innerHeight;
     const center = { lat: 41.5, lng: 70 }; // midpoint across FR-JP
     const zoom = aspect >= 1.4 ? 3 : aspect >= 0.8 ? 2 : 2;
@@ -346,6 +357,9 @@ const MapView = () => {
                   center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                   zoom={mapView.zoom}
                   onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                  onBoundsChange={(b) => {
+                    try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
+                  }}
                 />
               </div>
 
@@ -426,6 +440,9 @@ const MapView = () => {
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
                 onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                onBoundsChange={(b) => {
+                  try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
+                }}
                 fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
                 clusterAnimate={clusterAnim}
               />
@@ -446,6 +463,9 @@ const MapView = () => {
                       center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                       zoom={mapView.zoom}
                       onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                      onBoundsChange={(b) => {
+                        try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
+                      }}
                       clusterAnimate={clusterAnim}
                       centerOffsetPixels={{ x: 0, y: -60 }}
                     />
@@ -517,6 +537,9 @@ const MapView = () => {
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
                 onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                onBoundsChange={(b) => {
+                  try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
+                }}
                 clusterAnimate={clusterAnim}
               />
             </div>
