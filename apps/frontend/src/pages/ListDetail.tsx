@@ -7,6 +7,9 @@ import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
 import { Story } from '@/types/story';
 import { ViewToggle } from '@/components/ViewToggle';
+import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Map } from '@/components/Map';
 
 const ListDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -14,6 +17,8 @@ const ListDetailPage = () => {
   const location = useLocation();
   const { data: list, isLoading, error } = useList(slug || '');
   const { data: stories } = useStories();
+  const [params] = useSearchParams();
+  const disableMap = params.get('map') === 'off';
 
   if (isLoading) {
     return (
@@ -74,19 +79,45 @@ const ListDetailPage = () => {
         {list.description && (
           <p className="text-muted-foreground mb-6 max-w-2xl">{list.description}</p>
         )}
+        {/* Map above the story player when there is geo */}
+        {!disableMap && articleStories.some(s => s.geo) && (
+          <div className="mb-6 h-[40vh] rounded-lg overflow-hidden border">
+            <Map
+              stories={articleStories.filter(s => s.geo)}
+              onStorySelect={(s) => {
+                navigate(`/story/${encodeURIComponent(s.handle || s.id)}?from=${encodeURIComponent(location.pathname + location.search)}`);
+              }}
+              fitBounds={(function(){
+                const pts = articleStories.filter(s=>s.geo).map(s=>[s.geo!.lat, s.geo!.lng]) as [number,number][];
+                if (pts.length>=2){
+                  let minLat=pts[0][0],maxLat=pts[0][0],minLng=pts[0][1],maxLng=pts[0][1];
+                  for(const [la,ln] of pts){minLat=Math.min(minLat,la);maxLat=Math.max(maxLat,la);minLng=Math.min(minLng,ln);maxLng=Math.max(maxLng,ln);} 
+                  return [[minLat,minLng],[maxLat,maxLng]] as [[number,number],[number,number]];
+                }
+                return undefined;
+              })()}
+              fitPadding={80}
+              suppressZoomOnMarkerClick
+            />
+          </div>
+        )}
 
         {showViewer && superStory ? (
-          <div className="fixed inset-0 z-50 bg-black">
-            <TwoPanelStoryViewer
-              initialStoryId={superStory.id}
-              stories={[superStory]}
-              onClose={() => navigate(-1)}
-            />
+          <div>
+            <div className="mx-auto" style={{ width: '56.25vh', maxWidth: '100%', height: '80vh' }}>
+              <TwoPanelStoryViewer
+                initialStoryId={superStory.id}
+                stories={[superStory]}
+                onClose={() => navigate(-1)}
+                hideRightPanel
+                hideMetadataPanel
+              />
+            </div>
           </div>
         ) : (
           <div>
             <h2 className="text-xl font-semibold mb-4">Articles</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6 xl:max-w-[1460px] mx-auto">
               {articleStories.map((story) => (
                 <div
                   key={story.id}
@@ -99,11 +130,14 @@ const ListDetailPage = () => {
                 >
                   <div className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg">
                     {story.thumbnail && (
-                      <img src={story.thumbnail} alt={story.title} className="w-full h-full object-cover" />
+                      <img src={story.thumbnail} alt={story.title} className={`w-full h-full object-cover ${story.isClosed ? 'grayscale' : ''}`} />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                      <h3 className="font-semibold text-lg mb-1 line-clamp-2">{story.title}</h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-lg line-clamp-2 flex-1">{story.title}</h3>
+                        {story.isClosed && <span className="px-2 py-0.5 text-xs rounded-full bg-red-600 text-white whitespace-nowrap">Fermé</span>}
+                      </div>
                     </div>
                   </div>
                 </div>

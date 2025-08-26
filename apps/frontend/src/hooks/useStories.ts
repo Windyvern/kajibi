@@ -202,6 +202,7 @@ export const useStories = () => {
           subtitle: undefined,
           handle: attrs.slug,
           publishedAt: attrs.publishedAt || attrs.createdAt,
+          postedDate: attrs.posted_date || attrs.postedDate || undefined,
           firstVisit: attrs.first_visit || undefined,
           lastVisit: attrs.last_visit || undefined,
           panels,
@@ -215,6 +216,7 @@ export const useStories = () => {
           prizes: prizesList.length ? prizesList : undefined,
           username: attrs.username || undefined,
           avatarUrl: authorAvatarUrl,
+          mentions: Array.isArray(attrs.mentions) ? attrs.mentions.filter((x: any) => typeof x === 'string') : undefined,
           lists: Array.isArray(attrs.lists)
             ? attrs.lists.map((l: any) => ({
                 id: String(l.id || l.documentId || ''),
@@ -237,6 +239,7 @@ export const useStories = () => {
             attrs.latitude && attrs.longitude
               ? { lat: Number(attrs.latitude), lng: Number(attrs.longitude) }
               : undefined,
+          isClosed: Boolean(attrs.is_closed ?? attrs.isClosed ?? false),
         } as Story;
       });
     },

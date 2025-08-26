@@ -580,6 +580,10 @@ export interface ApiListList extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     description: Schema.Attribute.Text;
+    disable_map_view: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    list_type: Schema.Attribute.Enumeration<['articles', 'media']> &
+      Schema.Attribute.DefaultTo<'articles'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::list.list'> &
       Schema.Attribute.Private;

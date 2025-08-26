@@ -9,11 +9,14 @@ import { List as ListIcon } from 'lucide-react';
 import { ViewToggle } from '@/components/ViewToggle';
 import { SearchBar } from '@/components/SearchBar';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
+import OptionsPopover from '@/components/OptionsPopover';
+import { useOptions } from '@/context/OptionsContext';
 
 const GalleryPage = () => {
   const { data: stories, isLoading, error } = useStories();
   const [selected, setSelected] = useState<Story | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { showClosed } = useOptions();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -75,7 +78,8 @@ const GalleryPage = () => {
     images: sf.includes('i'),
   } as const;
   const { filtered, matchedPanelByStory, scores } = useSearchFilter(baseStories, q, fields);
-  const displayedStories = q ? filtered : baseStories;
+  let displayedStories = q ? filtered : baseStories;
+  if (!showClosed) displayedStories = displayedStories.filter(s => !s.isClosed);
 
   const listTitle = (() => {
     if (listParam) {
@@ -98,24 +102,28 @@ const GalleryPage = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Responsive header with padding around search */}
-      <div className="px-4 md:px-6 pt-4">
+      <div className="px-4 md:px-3 pt-4">
         {/* Desktop / wide screens: row with centered search and right actions */}
-        <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
-          <div />
-          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
+        <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4 fixedright-3">
+          <div className="hidden lg:block"/>
+          <div className="md:justify-self-start lg:justify-self-center md:w-full lg:w-[620px] xl:w-[720px]">
             <SearchBar
+              className="w-full"
               showFilters={filtersOpen}
               onToggleFilters={() => setFiltersOpen(o => !o)}
             />
           </div>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2 relative">
+
             <Link to="/lists">
               <Button variant="outline" className="bg-white/10 border-white/20">
                 <ListIcon size={16} className="mr-2" />
                 Listes
               </Button>
             </Link>
+            <OptionsPopover />
             <ViewToggle mode="route" />
+
           </div>
         </div>
 
@@ -127,13 +135,14 @@ const GalleryPage = () => {
               onToggleFilters={() => setFiltersOpen(o => !o)}
             />
           </div>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2 relative">
             <Link to="/lists">
               <Button variant="outline" className="bg-white/10 border-white/20">
                 <ListIcon size={16} className="mr-2" />
                 Listes
               </Button>
             </Link>
+            <OptionsPopover />
             <ViewToggle mode="route" />
           </div>
         </div>
@@ -158,7 +167,7 @@ const GalleryPage = () => {
         </div>
       )}
 
-      <LatestArticlesGallery
+  <LatestArticlesGallery
         stories={displayedStories}
         onSelect={(story) => {
           const pid = q ? matchedPanelByStory[story.id] : undefined;
@@ -173,7 +182,7 @@ const GalleryPage = () => {
               : `${base}?${from}`
           );
         }}
-      />
+  />
 
       {/* Viewer is now handled by /story/:slug route */}
     </div>

@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { SearchBar } from '@/components/SearchBar';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
 import { ViewToggle } from '@/components/ViewToggle';
+import OptionsPopover from '@/components/OptionsPopover';
+import { useOptions } from '@/context/OptionsContext';
 
 const MapView = () => {
   const { data: stories, isLoading, error } = useStories();
@@ -37,6 +39,7 @@ const MapView = () => {
   // Track viewport to trigger re-render on resize and switch layouts live
   const [viewport, setViewport] = useState({ w: window.innerWidth, h: window.innerHeight });
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { showClosed, clusterAnim } = useOptions();
   useEffect(() => {
     const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener('resize', onResize);
@@ -108,6 +111,9 @@ const MapView = () => {
   let visibleStories = q ? filtered : (stories || []);
   if (prizeParam) {
     visibleStories = visibleStories.filter((s) => (s.prizes || []).some((p) => (p.slug || p.id) === prizeParam));
+  }
+  if (!showClosed) {
+    visibleStories = visibleStories.filter((s) => !s.isClosed);
   }
 
   // Center on strong match
@@ -181,9 +187,9 @@ const MapView = () => {
       {!selectedStory && (
         <div className="fixed top-3 left-3 right-3 z-[10000]">
           {/* Desktop / wide screens: row layout */}
-          <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
+          <div className="hidden md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] lg:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
             {/* Left: Zoom controls (vertical: + on top) */}
-            <div className="flex flex-col items-start gap-2">
+            <div className="flex flex-col items-start gap-1">
               <Button
                 variant="default"
                 className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
@@ -201,15 +207,15 @@ const MapView = () => {
             </div>
 
             {/* Center: Search Bar (responsive widths) */}
-            <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
+            <div className="md:justify-self-start lg:justify-self-center md:w-full lg:w-[620px] xl:w-[720px]">
               <SearchBar
                 showFilters={filtersOpen}
                 onToggleFilters={() => setFiltersOpen(o => !o)}
               />
             </div>
 
-            {/* Right: Nav buttons (Listes left of toggle) */}
-            <div className="flex items-center justify-end gap-2">
+            {/* Right: Closed toggle + Nav buttons (Listes left of toggle) */}
+            <div className="flex items-top top-2 justify-end gap-2 relative">
               <Link to="/lists">
                 <Button
                   variant="default"
@@ -219,6 +225,7 @@ const MapView = () => {
                   Listes
                 </Button>
               </Link>
+              <OptionsPopover />
               <ViewToggle mode="route" />
             </div>
           </div>
@@ -232,7 +239,7 @@ const MapView = () => {
               />
             </div>
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <Button
                   variant="default"
                   className="bg-white text-gray-900 shadow-md rounded-full h-10 w-10 p-0"
@@ -248,13 +255,14 @@ const MapView = () => {
                   <Plus size={16} />
                 </Button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 relative">
                 <Link to="/lists">
                   <Button variant="default" className="bg-white text-gray-900 rounded-full border border-black/10 shadow-md h-8 px-3 py-4 text-sm">
                     <List size={16} className="mr-2" />
                     Listes
                   </Button>
                 </Link>
+                <OptionsPopover />
                 <ViewToggle mode="route" />
               </div>
             </div>
@@ -312,6 +320,8 @@ const MapView = () => {
                   zoom={mapView.zoom}
                   onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
                   fitPadding={40}
+                  clusterAnimate={clusterAnim}
+                  centerOffsetPixels={{ x: 0, y: -60 }}
                 />
               </div>
             )}
@@ -416,8 +426,8 @@ const MapView = () => {
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
                 onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
-                
                 fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
+                clusterAnimate={clusterAnim}
               />
             </div>
           )
@@ -436,6 +446,8 @@ const MapView = () => {
                       center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                       zoom={mapView.zoom}
                       onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                      clusterAnimate={clusterAnim}
+                      centerOffsetPixels={{ x: 0, y: -60 }}
                     />
                   </div>
                   <div className="flex-1 min-h-0 bg-white overflow-hidden">
@@ -505,6 +517,7 @@ const MapView = () => {
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
                 onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                clusterAnimate={clusterAnim}
               />
             </div>
           )

@@ -543,8 +543,7 @@ export const TwoPanelStoryViewer = ({
         style={{ height: '50vh' }}
       >
         <div className="p-4 h-full overflow-y-auto">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Story Details</h2>
+          <div className="flex justify-end items-center mb-2">
             <button
               onClick={() => setShowMetadataPanel(false)}
               className="p-2 rounded-full hover:bg-gray-100"

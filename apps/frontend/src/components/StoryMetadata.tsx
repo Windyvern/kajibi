@@ -11,9 +11,10 @@ interface StoryMetadataProps {
   story: Story;
   currentPanel: StoryPanelData;
   onHighlightSelect?: (highlight: any) => void;
+  hideUsername?: boolean;
 }
 
-export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryMetadataProps) => {
+export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUsername }: StoryMetadataProps) => {
   const normalizeUsername = (u?: string) => {
     if (!u) return '';
     const trimmed = u.trim();
@@ -60,8 +61,13 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryM
     <div className="h-full overflow-y-auto p-6 bg-white">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">{story.title}</h1>
-        {story.username && (
+        <div className="flex items-center gap-2 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900">{story.title}</h1>
+          {story.isClosed && (
+            <span className="px-2 py-0.5 text-xs rounded-full bg-red-600 text-white">Fermé</span>
+          )}
+        </div>
+        {story.username && !hideUsername && (
           <p className="text-lg text-gray-600 mb-1">
             <a href={`https://instagram.com/${usernameHandle(story.username)}`}
                target="_blank" rel="noopener noreferrer"
@@ -70,25 +76,14 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryM
             </a>
           </p>
         )}
-        {/* Type and prizes just below the username */}
+        {/* Type just below the username */}
         {(() => {
           const typeText = Array.isArray(story.types) && story.types.length > 0
             ? story.types.join(', ')
             : (story.category || (story as any).type);
-          return (
-            <>
-              {typeText && (
-                <p className="italic text-gray-700 mb-2">{typeText}</p>
-              )}
-              {Array.isArray(story.prizes) && story.prizes.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {story.prizes.map((p) => (
-                    <PrizeCapsule key={p.id} name={p.name} iconUrl={p.iconUrl} textColor={p.textColor} bgColor={p.bgColor} />
-                  ))}
-                </div>
-              )}
-            </>
-          );
+          return typeText ? (
+            <p className="italic text-gray-700 mb-2">{typeText}</p>
+          ) : null;
         })()}
         {story.address && (
           <div className="flex items-center text-gray-500 text-sm mb-4">
@@ -96,11 +91,22 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect }: StoryM
             <span>{story.address}</span>
           </div>
         )}
+        {/* Prizes below the address */}
+        {Array.isArray(story.prizes) && story.prizes.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {story.prizes.map((p) => (
+              <PrizeCapsule key={p.id} name={p.name} iconUrl={p.iconUrl} textColor={p.textColor} bgColor={p.bgColor} />
+            ))}
+          </div>
+        )}
         <div className="text-sm text-gray-500 space-y-1">
           {(() => {
+            const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+            if (story.postedDate) {
+              return <p>Publié le {fmt(story.postedDate)}</p>;
+            }
             const last = story.lastVisit || story.publishedAt;
             const first = story.firstVisit;
-            const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
             const same = first && last && new Date(first).toDateString() === new Date(last).toDateString();
             if (same) return <p>Visité le {fmt(last)}</p>;
             return (

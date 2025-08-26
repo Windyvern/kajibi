@@ -102,7 +102,7 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
 
       case "image":
         return (
-          <div className="relative h-full">
+          <div className="relative md:h-full">
             {panel.media && (
               <img
                 src={panel.media}
@@ -130,7 +130,7 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
 
       case "video":
         return (
-          <div className="relative h-full">
+          <div className="relative md:h-full">
             {panel.media && (
               <video
                 src={panel.media}

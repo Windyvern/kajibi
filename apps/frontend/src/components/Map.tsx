@@ -90,13 +90,18 @@ interface MapProps {
   onViewChange?: (center: { lat: number; lng: number }, zoom: number) => void;
   fitBounds?: [[number, number], [number, number]];
   fitPadding?: number;
+  suppressZoomOnMarkerClick?: boolean;
+  clusterAnimate?: boolean;
+  centerOffsetPixels?: { x: number; y: number };
 }
 
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, fitBounds, fitPadding = 60 }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
   const lastFitKeyRef = useRef<string | null>(null);
+  // Render zone padding to keep edge markers visible
+  const renderPad = useRef<{ left: number; right: number; bottom: number; top: number }>({ left: 64, right: 64, bottom: 200, top: 0 });
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -115,16 +120,18 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     // Initialize marker cluster group
     markersRef.current = L.markerClusterGroup({
       maxClusterRadius: 80,
+      animate: clusterAnimate,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
-        const childMarkers = cluster.getAllChildMarkers();
-        const first = childMarkers[0] as any;
-        const thumbnailUrl = first?.thumbnailUrl || null;
+  const childMarkers = cluster.getAllChildMarkers();
+  const first = childMarkers[0] as any;
+  const thumbnailUrl = first?.thumbnailUrl || null;
+  const closed = Boolean(first?.isClosed);
         return L.divIcon({
           html: `
             <div class="marker-container">
               <div class="marker-frame">
-                ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" />` : ''}
+    ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" ${closed ? 'style=\"filter:grayscale(100%)\"' : ''} />` : ''}
               </div>
               <span class="arrow"></span>
             </div>
@@ -137,7 +144,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       }
     });
 
-    mapInstanceRef.current.addLayer(markersRef.current);
+  mapInstanceRef.current.addLayer(markersRef.current);
 
     // Emit view changes to parent (e.g., to persist center/zoom across remounts)
     if (onViewChange) {
@@ -297,6 +304,43 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     };
   }, []);
 
+  // Recreate cluster group when clusterAnimate toggles
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (markersRef.current) {
+      try { map.removeLayer(markersRef.current); } catch {}
+    }
+    markersRef.current = L.markerClusterGroup({
+      maxClusterRadius: 80,
+      animate: clusterAnimate,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        const childMarkers = cluster.getAllChildMarkers();
+        const first = childMarkers[0] as any;
+        const thumbnailUrl = first?.thumbnailUrl || null;
+        const closed = Boolean(first?.isClosed);
+        return L.divIcon({
+          html: `
+            <div class="marker-container">
+              <div class="marker-frame">
+                ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" ${closed ? 'style="filter:grayscale(100%)"' : ''} />` : ''}
+              </div>
+              <span class="arrow"></span>
+            </div>
+            <div class="cluster-counter ${count < 10 ? 'cluster-small' : ''}">${count}</div>
+          `,
+          className: 'custom-cluster-icon',
+          iconSize: L.point(96, 190),
+          iconAnchor: [48, 190]
+        });
+      }
+    });
+    map.addLayer(markersRef.current);
+    // Force markers to re-add
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clusterAnimate]);
+
   useEffect(() => {
     if (!mapInstanceRef.current || !markersRef.current) return;
 
@@ -333,7 +377,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
             ${prizeHtml}
             <div class="marker-frame ${isSelected ? 'selected' : ''}" data-story-id="${story.id}">
               ${thumbnailUrl 
-                ? `<img src="${thumbnailUrl}" alt="${story.title}" />` 
+                ? `<img src="${thumbnailUrl}" alt="${story.title}" ${story.isClosed ? 'style="filter: grayscale(100%);"' : ''} />` 
                 : `<div class="marker-placeholder">${story.title[0]}</div>`
               }
             </div>
@@ -345,17 +389,34 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         iconAnchor: [48, 190]
       });
 
-      const marker = L.marker([story.geo.lat, story.geo.lng], { icon: markerIcon });
+  const marker = L.marker([story.geo.lat, story.geo.lng], { icon: markerIcon });
       
       // Store thumbnail URL for cluster use
-      (marker as any).thumbnailUrl = thumbnailUrl;
+  (marker as any).thumbnailUrl = thumbnailUrl;
+  (marker as any).isClosed = story.isClosed;
       
-      marker.on('click', () => {
-        // Center and zoom to street level before opening the story
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setView([story.geo!.lat, story.geo!.lng], 16, { animate: true });
-          if (onViewChange) {
-            onViewChange({ lat: story.geo!.lat, lng: story.geo!.lng }, 16);
+  marker.on('click', () => {
+        if (!suppressZoomOnMarkerClick) {
+          // Center and zoom to street level before opening the story
+          if (mapInstanceRef.current) {
+            if (centerOffsetPixels) {
+              const map = mapInstanceRef.current;
+              const z = 16;
+              const pt = map.project([story.geo!.lat, story.geo!.lng], z);
+              const target = L.point(pt.x + (centerOffsetPixels.x || 0), pt.y + (centerOffsetPixels.y || 0));
+              const latlng = map.unproject(target, z);
+      map.setView(latlng, z, { animate: true });
+            } else {
+      // Use panInside with padding to avoid edge cut-offs
+      const map = mapInstanceRef.current;
+      const paddingTopLeft = L.point(renderPad.current.left, renderPad.current.top);
+      const paddingBottomRight = L.point(renderPad.current.right, renderPad.current.bottom);
+      map.setView([story.geo!.lat, story.geo!.lng], 16, { animate: true });
+      try { (map as any).panInside?.([story.geo!.lat, story.geo!.lng], { paddingTopLeft, paddingBottomRight }); } catch {}
+            }
+            if (onViewChange) {
+              onViewChange({ lat: story.geo!.lat, lng: story.geo!.lng }, 16);
+            }
           }
         }
         onStorySelect(story);
@@ -387,7 +448,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
           .catch(() => {});
       }
     });
-  }, [stories, onStorySelect, selectedStoryId]);
+  }, [stories, onStorySelect, selectedStoryId, clusterAnimate]);
 
   // Apply external center/zoom changes without creating feedback loops
   useEffect(() => {
@@ -407,7 +468,18 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     const EPS = 1e-4; // ~11m threshold
     const needsMove = latDiff > EPS || lngDiff > EPS || zoomDiff >= 1;
     if (needsMove) {
-      map.setView([nextLat, nextLng], nextZoom, { animate: false });
+      if (centerOffsetPixels && typeof nextLat === 'number' && typeof nextLng === 'number') {
+        try {
+          const pt = map.project([nextLat, nextLng], nextZoom);
+          const target = L.point(pt.x + (centerOffsetPixels.x || 0), pt.y + (centerOffsetPixels.y || 0));
+          const latlng = map.unproject(target, nextZoom);
+          map.setView(latlng, nextZoom, { animate: false });
+        } catch {
+          map.setView([nextLat, nextLng], nextZoom, { animate: false });
+        }
+      } else {
+        map.setView([nextLat, nextLng], nextZoom, { animate: false });
+      }
     }
   }, [center?.lat, center?.lng, zoom]);
 
@@ -419,7 +491,12 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     if (lastFitKeyRef.current === key) return;
     try {
       const b = L.latLngBounds([L.latLng(fitBounds[0][0], fitBounds[0][1]), L.latLng(fitBounds[1][0], fitBounds[1][1])]);
-      map.fitBounds(b, { padding: [fitPadding, fitPadding], animate: false });
+  // Expand bounds visually by render padding
+  const padLeft = fitPadding + renderPad.current.left;
+  const padRight = fitPadding + renderPad.current.right;
+  const padTop = fitPadding + renderPad.current.top;
+  const padBottom = fitPadding + renderPad.current.bottom;
+  map.fitBounds(b, { paddingTopLeft: L.point(padLeft, padTop), paddingBottomRight: L.point(padRight, padBottom), animate: false });
       lastFitKeyRef.current = key;
     } catch {}
   }, [fitBounds, fitPadding]);

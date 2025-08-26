@@ -53,6 +53,16 @@
       "relation": "manyToMany",
       "target": "api::article.article",
       "mappedBy": "lists"
+    },
+    "list_type": {
+      "type": "enumeration",
+      "enum": ["articles", "media"],
+      "default": "articles",
+      "required": false
+    },
+    "disable_map_view": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

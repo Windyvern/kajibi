@@ -20,6 +20,8 @@ export interface Story {
   subtitle?: string;
   handle?: string;
   publishedAt: string;
+  // Optional posted date for Posts/Reels (or articles when present)
+  postedDate?: string;
   firstVisit?: string;
   lastVisit?: string;
   panels: StoryPanelData[];
@@ -48,6 +50,16 @@ export interface Story {
   tags?: string[];
   address?: string;
   description?: string;
+  // Mentioned usernames (without leading @) referenced in description/content
+  mentions?: string[];
+  // Posts/Reels: linked articles suggested by importer
+  linkedArticles?: Array<{
+    id: string;
+    slug?: string;
+    title?: string;
+    username?: string;
+    thumbnail?: string;
+  }>;
   lists?: Array<{
     id: string;
     name: string;
@@ -58,4 +70,6 @@ export interface Story {
     lat: number;
     lng: number;
   };
+  // Shop closed flag (Établissement fermé)
+  isClosed?: boolean;
 }

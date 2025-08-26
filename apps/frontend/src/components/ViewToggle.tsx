@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Map as MapIcon, Grid3X3 } from 'lucide-react';
 
-export function ViewToggle({ mode = 'route' }: { mode?: 'route' | 'query' }) {
+export function ViewToggle({ mode = 'route', showLabels = true }: { mode?: 'route' | 'query'; showLabels?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -25,22 +25,22 @@ export function ViewToggle({ mode = 'route' }: { mode?: 'route' | 'query' }) {
   };
 
   return (
-    <div className="inline-flex items-center rounded-full bg-white shadow-md border border-black/10 overflow-hidden select-none">
+    <div className="inline-flex items-start rounded-full bg-white shadow-md border border-black/10 overflow-hidden select-none">
       <button
         className={`px-3 py-1.5 text-sm font-medium flex items-center ${isMap ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
         onClick={() => go('map')}
         aria-pressed={isMap}
       >
-        <MapIcon size={16} className="mr-1.5" />
-        <span>Carte</span>
+  <MapIcon size={16} className={showLabels ? 'mr-1.5' : ''} />
+  {showLabels && <span>Carte</span>}
       </button>
       <button
         className={`px-3 py-1.5 text-sm font-medium flex items-center ${!isMap ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
         onClick={() => go('gallery')}
         aria-pressed={!isMap}
       >
-        <Grid3X3 size={16} className="mr-1.5" />
-        <span>Galerie</span>
+  <Grid3X3 size={16} className={showLabels ? 'mr-1.5' : ''} />
+  {showLabels && <span>Galerie</span>}
       </button>
     </div>
   );

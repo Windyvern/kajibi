@@ -65,7 +65,6 @@ const AuthorDetailPage = () => {
                 Listes
               </Button>
             </Link>
-            <ViewToggle mode="query" />
           </div>
         </div>
 
@@ -74,13 +73,6 @@ const AuthorDetailPage = () => {
             <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
           </div>
           <div className="flex items-center justify-end gap-2">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <ViewToggle mode="query" />
           </div>
         </div>
       </div>
@@ -99,7 +91,7 @@ const AuthorDetailPage = () => {
           </div>
           <h2 className="text-2xl font-bold text-foreground">{author.name}</h2>
         </div>
-        <div className="flex items-center gap-3 border-b border-border mb-4">
+        <div className="flex items-center gap-3 border-b border-border mb-4" data-lov-id="src/pages/AuthorDetail.tsx:102:8">
           {[
             { key: 'stories', label: 'Stories' },
             { key: 'posts', label: 'Posts' },
@@ -113,6 +105,13 @@ const AuthorDetailPage = () => {
               {t.label}
             </button>
           ))}
+          {/* View toggle moved here; icon-only on mobile */}
+          <div className="ml-auto hidden md:block">
+            <ViewToggle mode="query" />
+          </div>
+          <div className="ml-auto md:hidden">
+            <ViewToggle mode="query" showLabels={false} />
+          </div>
         </div>
       </div>
       {tab === 'stories' && (
