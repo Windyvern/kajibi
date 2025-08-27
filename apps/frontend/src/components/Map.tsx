@@ -457,18 +457,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
-    // Also toggle base map zoom animation in real-time
-    try {
-      (map.options as any).zoomAnimation = clusterAnimate;
-      (map.options as any).markerZoomAnimation = clusterAnimate;
-      (map as any)._zoomAnimated = clusterAnimate;
-      const container = map.getContainer();
-      if (clusterAnimate) {
-        L.DomUtil.addClass(container, 'leaflet-zoom-anim');
-      } else {
-        L.DomUtil.removeClass(container, 'leaflet-zoom-anim');
-      }
-    } catch {}
+    // Keep base map zoom animation constant; only reconfigure cluster animations
     if (markersRef.current) {
       try { map.removeLayer(markersRef.current); } catch {}
     }
