@@ -39,7 +39,7 @@ export const OptionsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const stored = useMemo(() => readStored(), []);
   const [showClosed, setShowClosed] = useState<boolean>(stored?.showClosed ?? true);
   const [darkMode, setDarkMode] = useState<boolean>(stored?.darkMode ?? false);
-  const [clusterAnim, setClusterAnim] = useState<boolean>(stored?.clusterAnim ?? false);
+  const [clusterAnim, setClusterAnim] = useState<boolean>(stored?.clusterAnim ?? true);
   const [vegMode, setVegMode] = useState<VegMode>(stored?.vegMode ?? 'off');
   const [galleryMap, setGalleryMap] = useState<boolean>(stored?.galleryMap ?? true);
   const [chunkedLoading, setChunkedLoading] = useState<boolean>((stored as any)?.chunkedLoading ?? false);

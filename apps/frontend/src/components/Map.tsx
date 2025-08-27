@@ -457,6 +457,18 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
+    // Also toggle base map zoom animation in real-time
+    try {
+      (map.options as any).zoomAnimation = clusterAnimate;
+      (map.options as any).markerZoomAnimation = clusterAnimate;
+      (map as any)._zoomAnimated = clusterAnimate;
+      const container = map.getContainer();
+      if (clusterAnimate) {
+        L.DomUtil.addClass(container, 'leaflet-zoom-anim');
+      } else {
+        L.DomUtil.removeClass(container, 'leaflet-zoom-anim');
+      }
+    } catch {}
     if (markersRef.current) {
       try { map.removeLayer(markersRef.current); } catch {}
     }
@@ -497,6 +509,8 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       }
     });
     map.addLayer(markersRef.current);
+    // Force marker rebuild after group recreation (bypass signature short-circuit)
+    try { lastStoriesSigRef.current = null; } catch {}
     // Rebind cluster click with custom padding after recreation
     if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
       try {
