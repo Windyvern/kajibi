@@ -1,10 +1,10 @@
 
 import { useEffect, useRef } from 'react';
-import L from 'leaflet';
+import type * as Leaflet from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import 'leaflet.markercluster';
+const L = (window as any).L as typeof Leaflet;
 import { Story } from '@/types/story';
 
 // Plugins are loaded via script tags in index.html; no dynamic loader here
@@ -147,6 +147,11 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         wheelDebounceTime: 10,
         // Keep the default step for +/- controls
         zoomDelta: 1,
+        // Avoid conflicts with double-click default on touch devices
+        doubleClickZoom: false,
+        touchZoom: true,
+        // @ts-ignore ensure tap handler enabled when available
+        tap: true,
         // Use DoubleTapDragZoom plugin with Google Maps-like behavior
         // @ts-ignore plugin option
         doubleTapDragZoom: 'center',

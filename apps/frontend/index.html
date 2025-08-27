@@ -16,18 +16,16 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <!-- Load Leaflet and double-tap-drag plugins in header (plugins after Leaflet) -->
+    <script src="https://unpkg.com/leaflet"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet-doubletapdrag"></script>
+    <script src="https://unpkg.com/leaflet-doubletapdragzoom"></script>
   </head>
 
   <body>
     <div id="root"></div>
-    <!-- Expose Leaflet instance globally before loading double-tap-drag plugins -->
-    <script type="module">
-      import L from 'leaflet';
-      // @ts-ignore
-      window.L = L;
-    </script>
-    <script src="https://unpkg.com/leaflet-doubletapdrag"></script>
-    <script src="https://unpkg.com/leaflet-doubletapdragzoom"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
