@@ -13,6 +13,12 @@ interface OptionsState {
   setVegMode: (v: VegMode) => void;
   galleryMap: boolean; // Carte en vue Galerie
   setGalleryMap: (v: boolean) => void;
+  // Progressive cluster build:
+  // - Keeps UI responsive while adding thousands of markers by chunking work
+  // - Clusters/counts appear progressively and stabilize on completion
+  // - Leave disabled by default; wire to Leaflet.markercluster's chunkedLoading
+  chunkedLoading: boolean;
+  setChunkedLoading: (v: boolean) => void;
 }
 
 const OptionsContext = createContext<OptionsState | undefined>(undefined);
@@ -33,16 +39,17 @@ export const OptionsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const stored = useMemo(() => readStored(), []);
   const [showClosed, setShowClosed] = useState<boolean>(stored?.showClosed ?? true);
   const [darkMode, setDarkMode] = useState<boolean>(stored?.darkMode ?? false);
-  const [clusterAnim, setClusterAnim] = useState<boolean>(stored?.clusterAnim ?? true);
+  const [clusterAnim, setClusterAnim] = useState<boolean>(stored?.clusterAnim ?? false);
   const [vegMode, setVegMode] = useState<VegMode>(stored?.vegMode ?? 'off');
   const [galleryMap, setGalleryMap] = useState<boolean>(stored?.galleryMap ?? true);
+  const [chunkedLoading, setChunkedLoading] = useState<boolean>((stored as any)?.chunkedLoading ?? false);
 
   // Persist to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ showClosed, darkMode, clusterAnim, vegMode, galleryMap }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ showClosed, darkMode, clusterAnim, vegMode, galleryMap, chunkedLoading }));
     } catch {}
-  }, [showClosed, darkMode, clusterAnim, vegMode, galleryMap]);
+  }, [showClosed, darkMode, clusterAnim, vegMode, galleryMap, chunkedLoading]);
 
   const value = useMemo<OptionsState>(() => ({
     showClosed,
@@ -55,7 +62,9 @@ export const OptionsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setVegMode,
     galleryMap,
     setGalleryMap,
-  }), [showClosed, darkMode, clusterAnim, vegMode, galleryMap]);
+    chunkedLoading,
+    setChunkedLoading,
+  }), [showClosed, darkMode, clusterAnim, vegMode, galleryMap, chunkedLoading]);
 
   return (
     <OptionsContext.Provider value={value}>{children}</OptionsContext.Provider>

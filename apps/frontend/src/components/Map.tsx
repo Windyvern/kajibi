@@ -93,6 +93,10 @@ interface MapProps {
   fitPadding?: number;
   suppressZoomOnMarkerClick?: boolean;
   clusterAnimate?: boolean;
+  // Progressive cluster build (Leaflet.markercluster: chunkedLoading). Intentionally off by default.
+  // When true, markers are added in chunks to keep the UI responsive
+  // during large adds/rebuilds. Counts/bounds settle as chunks finish.
+  chunkedLoading?: boolean;
   centerOffsetPixels?: { x: number; y: number };
   clusterRadiusByZoom?: (zoom: number) => number;
   offsetExternalCenter?: boolean;
@@ -102,7 +106,7 @@ interface MapProps {
 // Use bundler-imported assets to ensure availability
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -124,7 +128,12 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     // Initialize map
     const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
     const initZoom: number = typeof zoom === 'number' ? zoom : 4;
-    mapInstanceRef.current = L.map(mapRef.current, { zoomControl: false }).setView(initCenter, initZoom);
+    mapInstanceRef.current = L.map(mapRef.current, {
+      zoomControl: false,
+      zoomAnimation: true,
+      markerZoomAnimation: true,
+      fadeAnimation: true,
+    }).setView(initCenter, initZoom);
 
     // Add tile layer (Carto light style to match legacy design)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
@@ -144,6 +153,10 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       removeOutsideVisibleBounds: false,
       // Enable animated expand/collapse during zoom (controlled by prop)
       animate: clusterAnimate,
+      // Enable animation when adding markers (helps smoothness)
+      animateAddingMarkers: clusterAnimate,
+      // @ts-ignore Provided by leaflet.markercluster
+      chunkedLoading: !!chunkedLoading,
       // Do not draw coverage polygon on hover/click
       showCoverageOnHover: false,
       iconCreateFunction: (cluster) => {
@@ -374,7 +387,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         font-family: 'Inter', sans-serif;
         font-size: 12px;
         font-weight: 700;
-        height: 24px;
+        height: 18px;
         padding: 0 8px;
         border-radius: 9999px;
         display: inline-flex;
@@ -431,6 +444,9 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       spiderfyOnEveryClick: nativeClusterClick,
       removeOutsideVisibleBounds: false,
       animate: clusterAnimate,
+      animateAddingMarkers: clusterAnimate,
+      // @ts-ignore Provided by leaflet.markercluster
+      chunkedLoading: !!chunkedLoading,
       showCoverageOnHover: false,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
@@ -706,7 +722,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
   return (
     <div className="relative w-full h-full">
-      <div ref={mapRef} className="w-full h-full transition-all" />
+      <div ref={mapRef} className="w-full h-full" />
       {/* Bottom-left logo + Instagram (both link to Instagram) */}
       <div className="pointer-events-auto absolute left-4 bottom-4 flex items-center gap-3 z-[11000]">
         <a

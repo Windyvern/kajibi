@@ -392,6 +392,7 @@ const MapView = () => {
                   onBoundsChange={(b) => {
                     try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                   }}
+                  clusterAnimate={clusterAnim}
                   centerOffsetPixels={{ x: 0, y: -95 }}
                 />
               </div>
@@ -503,6 +504,7 @@ const MapView = () => {
                         try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                       }}
                       fitBounds={fitToBounds}
+                      clusterAnimate={clusterAnim}
                       clusterAnimate={clusterAnim}
                       centerOffsetPixels={{ x: 0, y: -95 }}
                     />

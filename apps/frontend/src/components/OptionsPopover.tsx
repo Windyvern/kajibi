@@ -7,7 +7,7 @@ interface OptionsPopoverProps {
 }
 
 export const OptionsPopover = ({ align = 'right' }: OptionsPopoverProps) => {
-  const { showClosed, setShowClosed, darkMode, setDarkMode, clusterAnim, setClusterAnim, vegMode, setVegMode, galleryMap, setGalleryMap } = useOptions();
+  const { showClosed, setShowClosed, darkMode, setDarkMode, clusterAnim, setClusterAnim, vegMode, setVegMode, galleryMap, setGalleryMap, chunkedLoading, setChunkedLoading } = useOptions();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -71,6 +71,12 @@ export const OptionsPopover = ({ align = 'right' }: OptionsPopoverProps) => {
                 <span className="text-sm">Animations de zoom</span>
                 <button onClick={() => setClusterAnim(!clusterAnim)} className={`relative w-12 h-6 rounded-full ${clusterAnim ? 'bg-green-500' : 'bg-gray-300'}`}>
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${clusterAnim ? 'translate-x-6' : ''}`} />
+                </button>
+            </div>
+            <div className="flex items-center justify-between py-2" title="Ajoute les marqueurs en petits morceaux pour garder l'UI fluide (expérimental)">
+                <span className="text-sm">Chargement progressif</span>
+                <button onClick={() => setChunkedLoading(!chunkedLoading)} className={`relative w-12 h-6 rounded-full ${chunkedLoading ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${chunkedLoading ? 'translate-x-6' : ''}`} />
                 </button>
             </div>
             </div>

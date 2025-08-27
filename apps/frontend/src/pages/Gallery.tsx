@@ -18,7 +18,7 @@ const GalleryPage = () => {
   const { data: stories, isLoading, error } = useStories();
   const [selected, setSelected] = useState<Story | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const { showClosed, galleryMap } = useOptions();
+  const { showClosed, galleryMap, clusterAnim } = useOptions();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -219,6 +219,7 @@ const GalleryPage = () => {
             fitPadding={80}
             centerOffsetPixels={{ x: 0, y: -95 }}
             selectedStoryId={selectedStory?.id}
+            clusterAnimate={clusterAnim}
           />
           {selectedStory && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[12000]">

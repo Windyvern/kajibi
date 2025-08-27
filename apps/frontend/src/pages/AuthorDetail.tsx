@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useAuthors } from '@/hooks/useAuthors';
 import { useStories } from '@/hooks/useStories';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
+import { useOptions } from '@/context/OptionsContext';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
 import { useAuthorPosts, useAuthorReels } from '@/hooks/useAuthorMedia';
 import { ViewToggle } from '@/components/ViewToggle';
@@ -19,6 +20,7 @@ const AuthorDetailPage = () => {
   const style = params.get('style') === 'map' ? 'map' : 'gallery';
   const { data: authors, isLoading: aLoading, error: aError } = useAuthors();
   const { data: stories, isLoading: sLoading, error: sError } = useStories();
+  const { clusterAnim } = useOptions();
 
   const author = useMemo(() => (authors || []).find(a => (a.slug || a.id) === slug), [authors, slug]);
   const authorStories = useMemo(() => {
@@ -118,6 +120,7 @@ const AuthorDetailPage = () => {
               })()}
               fitPadding={80}
               centerOffsetPixels={{ x: 0, y: -95 }}
+              clusterAnimate={clusterAnim}
             />
           </div>
         ) : (
