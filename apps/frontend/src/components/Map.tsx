@@ -83,7 +83,7 @@ L.Icon.Default.mergeOptions({
 
 interface MapProps {
   stories: Story[];
-  onStorySelect: (story: Story) => void;
+  onStorySelect: (story: Story, meta?: { source?: 'marker' | 'cluster' | 'external' | string }) => void;
   selectedStoryId?: string;
   center?: { lat: number; lng: number };
   zoom?: number;
@@ -95,13 +95,14 @@ interface MapProps {
   clusterAnimate?: boolean;
   centerOffsetPixels?: { x: number; y: number };
   clusterRadiusByZoom?: (zoom: number) => number;
+  offsetExternalCenter?: boolean;
 }
 
 // Assets (avatar + instagram icon)
 // Use bundler-imported assets to ensure availability
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels, clusterRadiusByZoom }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -137,6 +138,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function'
         ? clusterRadiusByZoom(z)
         : (z < 6 ? 120 : z < 12 ? 90 : 50)),
+      zoomToBoundsOnClick: false,
       // Keep markers rendered even when slightly offscreen to avoid despawn
       removeOutsideVisibleBounds: false,
       // Enable animated expand/collapse during zoom (controlled by prop)
@@ -146,12 +148,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
   const childMarkers = cluster.getAllChildMarkers();
-  const first = childMarkers[0] as any;
-  const thumbnailUrl = first?.thumbnailUrl || null;
-  const closed = Boolean(first?.isClosed);
+        const first = childMarkers[0] as any;
+        const thumbnailUrl = first?.thumbnailUrl || null;
+        const closed = Boolean(first?.isClosed);
+        const scale = count > 10 ? (1 + 0.18 * Math.log10(1 + (count - 10) / 10)) : 1;
         return L.divIcon({
           html: `
-            <div class="marker-container">
+            <div class="marker-container" style="transform: scale(${scale.toFixed(3)})">
               <div class="marker-frame">
     ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" ${closed ? 'style=\"filter:grayscale(100%)\"' : ''} />` : ''}
               </div>
@@ -184,14 +187,14 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         const padBottom = renderPad.current.bottom + Math.round(markerH / 4) + extraTB;
         const padTopLeft = L.point(padLeft, padTop);
         const padBottomRight = L.point(padRight, padBottom);
-        // Compute a target zoom that shows all child markers but avoid over-zooming
+        // Compute a target zoom that shows all child markers, backing off one level for full visibility
         const approxPad = L.point(Math.max(padLeft, padRight), Math.max(padTop, padBottom));
         const currZ = map.getZoom();
-        let targetZ = map.getBoundsZoom(b, false, approxPad);
-        // Cap how deep we zoom into clusters to keep context; avoid exceeding +1 level per click
-        const MAX_CLUSTER_ZOOM = 15;
-        targetZ = Math.min(targetZ, MAX_CLUSTER_ZOOM, currZ + 1);
+        const baseZ = map.getBoundsZoom(b, false, approxPad);
+        let targetZ = Math.max(currZ + 1, Math.min(19, baseZ - 1));
         if (targetZ <= currZ) {
+          // If we can't increase zoom, spiderfy overlapping items for better UX
+          try { a.layer.spiderfy(); } catch {}
           map.setView(b.getCenter(), Math.min(19, currZ + 1), { animate: true });
         } else {
           // Fit with asymmetric padding so the visual pins have breathing room
@@ -259,6 +262,30 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         background: transparent;
         border: none;
         filter: drop-shadow(0 6px 10px rgba(0,0,0,0.25));
+      }
+      .marker-frame .play-badge {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .marker-frame .play-badge::before {
+        content: '';
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.9);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      }
+      .marker-frame .play-badge .triangle {
+        position: absolute;
+        margin-left: 3px;
+        width: 0; height: 0;
+        border-top: 9px solid transparent;
+        border-bottom: 9px solid transparent;
+        border-left: 14px solid #111;
       }
       .marker-container .prize-badge .icon {
         width: 40px;
@@ -370,9 +397,9 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         border: none !important;
       }
   /* Subtle deploy/collapse */
-  .zoom-in .custom-story-marker .marker-frame { transform: scale(0.92); opacity: 0.8; }
-  .zoom-in .custom-story-marker .marker-frame, .zoom-out .custom-story-marker .marker-frame { transition: transform 220ms ease, opacity 220ms ease; }
-  .zoom-out .custom-story-marker .marker-frame { transform: scale(1.06); opacity: 0.8; }
+  .zoom-in .custom-story-marker .marker-container { transform: scale(0.92); opacity: 0.8; }
+  .zoom-in .custom-story-marker .marker-container, .zoom-out .custom-story-marker .marker-container { transition: transform 220ms ease, opacity 220ms ease; }
+  .zoom-out .custom-story-marker .marker-container { transform: scale(1.06); opacity: 0.8; }
   .zoom-in .custom-cluster-icon, .zoom-out .custom-cluster-icon { transition: transform 220ms ease, opacity 220ms ease; }
   .zoom-in .custom-cluster-icon { transform: scale(0.92); opacity: 0.9; }
   .zoom-out .custom-cluster-icon { transform: scale(1.06); opacity: 0.9; }
@@ -402,6 +429,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function'
         ? clusterRadiusByZoom(z)
         : (z < 6 ? 120 : z < 12 ? 90 : 50)),
+      zoomToBoundsOnClick: false,
       removeOutsideVisibleBounds: false,
       animate: clusterAnimate,
       showCoverageOnHover: false,
@@ -411,9 +439,10 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         const first = childMarkers[0] as any;
         const thumbnailUrl = first?.thumbnailUrl || null;
         const closed = Boolean(first?.isClosed);
+        const scale = count > 10 ? (1 + 0.18 * Math.log10(1 + (count - 10) / 10)) : 1;
         return L.divIcon({
           html: `
-            <div class="marker-container">
+            <div class="marker-container" style="transform: scale(${scale.toFixed(3)})">
               <div class="marker-frame">
                 ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" ${closed ? 'style="filter:grayscale(100%)"' : ''} />` : ''}
               </div>
@@ -442,10 +471,10 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         const padBottomRight = L.point(padRight, padBottom);
         const approxPad = L.point(Math.max(padLeft, padRight), Math.max(padTop, padBottom));
         const currZ = map.getZoom();
-        let targetZ = map.getBoundsZoom(b, false, approxPad);
-        const MAX_CLUSTER_ZOOM = 15;
-        targetZ = Math.min(targetZ, MAX_CLUSTER_ZOOM, currZ + 1);
+        const baseZ = map.getBoundsZoom(b, false, approxPad);
+        let targetZ = Math.max(currZ + 1, Math.min(19, baseZ - 1));
         if (targetZ <= currZ) {
+          try { a.layer.spiderfy(); } catch {}
           map.setView(b.getCenter(), Math.min(19, currZ + 1), { animate: true });
         } else {
           map.fitBounds(b, { paddingTopLeft: padTopLeft, paddingBottomRight: padBottomRight, animate: true, maxZoom: targetZ });
@@ -487,13 +516,15 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         }
       }
 
+      const isVideoThumb = story.panels.find(p => p.type === 'video') ? true : (/\.(mp4|mov|webm)$/i.test(story.thumbnail || '') ? true : false);
+      const playBadge = isVideoThumb ? `<div class=\"play-badge\"><div class=\"triangle\"></div></div>` : '';
       const markerIcon = L.divIcon({
         html: `
           <div class="marker-container">
             ${prizeHtml}
             <div class="marker-frame ${isSelected ? 'selected' : ''}" data-story-id="${story.id}">
               ${thumbnailUrl 
-                ? `<img src="${thumbnailUrl}" alt="${story.title}" ${story.isClosed ? 'style="filter: grayscale(100%);"' : ''} />` 
+                ? `<img src="${thumbnailUrl}" alt="${story.title}" ${story.isClosed ? 'style=\"filter: grayscale(100%);\"' : ''} />` 
                 : `<div class="marker-placeholder">${story.title[0]}</div>`
               }
             </div>
@@ -541,7 +572,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
             }
           }
         }
-        onStorySelect(story);
+        onStorySelect(story, { source: 'marker' });
       });
 
       // Remember target so we can re-center after layout changes
@@ -594,7 +625,8 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     const EPS = 1e-4; // ~11m threshold
     const needsMove = latDiff > EPS || lngDiff > EPS || zoomDiff >= 1;
     if (needsMove) {
-      if ((centerOffsetPixels || defaultCenterOffset.current) && typeof nextLat === 'number' && typeof nextLng === 'number') {
+      const shouldOffset = Boolean((centerOffsetPixels || defaultCenterOffset.current) && (offsetExternalCenter || selectedStoryId || lastFocusedRef.current));
+      if (shouldOffset && typeof nextLat === 'number' && typeof nextLng === 'number') {
         try {
           const pt = map.project([nextLat, nextLng], nextZoom);
           const off = centerOffsetPixels || defaultCenterOffset.current;
@@ -608,7 +640,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         map.setView([nextLat, nextLng], nextZoom, { animate: false });
       }
     }
-  }, [center?.lat, center?.lng, zoom]);
+  }, [center?.lat, center?.lng, zoom, offsetExternalCenter]);
 
   // Apply fitBounds when prop changes (once per unique bounds)
   useEffect(() => {
@@ -692,7 +724,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
           className="shrink-0 h-12 w-12 rounded-full bg-white/90 border shadow-md flex items-center justify-center"
           aria-label="Instagram"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#ffffff" role="img" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#dead4b" role="img" aria-hidden="true">
             <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
           </svg>
         </a>

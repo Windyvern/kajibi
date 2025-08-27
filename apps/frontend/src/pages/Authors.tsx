@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Map, List as ListIcon } from 'lucide-react';
-import { SearchBar } from '@/components/SearchBar';
+import { SearchHeader } from '@/components/SearchHeader';
 import { useState } from 'react';
 import { useAuthors } from '@/hooks/useAuthors';
 
@@ -25,46 +25,7 @@ const AuthorsPage = () => {
     <div className="min-h-screen bg-background">
       {/* Header with centered search and right nav (desktop), stacked on mobile */}
       <div className="px-4 md:px-6 pt-4">
-        <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
-          <div />
-          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
-            <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="md:hidden flex flex-col gap-2">
-          <div className="w-full md:w-[720px] mx-auto">
-            <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <Link to="/map">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <Map size={16} className="mr-2" />
-                Carte
-              </Button>
-            </Link>
-          </div>
-        </div>
+        <SearchHeader />
       </div>
 
       <div className="p-6">

@@ -1,13 +1,21 @@
 import { Link } from 'react-router-dom';
 import { useLists } from '@/hooks/useLists';
+import { useStories } from '@/hooks/useStories';
+import { Map } from '@/components/Map';
+import { Story } from '@/types/story';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { ViewToggle } from '@/components/ViewToggle';
-import { SearchBar } from '@/components/SearchBar';
+import { SearchHeader } from '@/components/SearchHeader';
 import { useState } from 'react';
 
 const ListsPage = () => {
   const { data: lists, isLoading, error } = useLists();
+  const { data: stories } = useStories();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const isMap = params.get('style') === 'map';
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   if (isLoading) {
@@ -40,31 +48,10 @@ const ListsPage = () => {
     <div className="min-h-screen bg-background">
       {/* Header with centered search and right nav (desktop), stacked on mobile */}
       <div className="px-4 md:px-6 pt-4">
-        <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
-          <div />
-          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
-            <SearchBar
-              showFilters={filtersOpen}
-              onToggleFilters={() => setFiltersOpen(o => !o)}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <ViewToggle mode="route" />
-          </div>
-        </div>
-        <div className="md:hidden flex flex-col gap-2">
-          <div className="w-full md:w-[720px] mx-auto">
-            <SearchBar
-              showFilters={filtersOpen}
-              onToggleFilters={() => setFiltersOpen(o => !o)}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <ViewToggle mode="route" />
-          </div>
-        </div>
+        <SearchHeader viewToggleMode="route" showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o=>!o)} />
       </div>
 
+      {!isMap && (
       <div className="p-6">
         <div className="w-full flex justify-center">
           <h2 className="w-full xl:max-w-[1460px] mx-auto text-2xl font-bold mb-6 text-foreground">Listes</h2>
@@ -89,6 +76,25 @@ const ListsPage = () => {
           </div>
         </div>
       </div>
+      )}
+
+      {isMap && (
+        <div className="h-[100svh] w-full">
+          {(() => {
+            const allStories = stories || [];
+            const pseudo = (lists || []).map((l) => {
+              const inList = allStories.filter(s => (s.lists || []).some(it => (it.slug || it.id) === (l.slug || l.id)) && s.geo);
+              let lat = 0, lng = 0, n = 0;
+              inList.forEach(s => { lat += s.geo!.lat; lng += s.geo!.lng; n += 1; });
+              const center = (l.latitude && l.longitude) ? { lat: l.latitude, lng: l.longitude } : (n > 0 ? { lat: lat/n, lng: lng/n } : undefined);
+              return { id: `list-${l.slug || l.id}`, title: l.name, author: '', handle: l.slug || l.id, publishedAt: new Date().toISOString(), panels: [], thumbnail: l.thumbnail, geo: center } as Story;
+            }).filter(s => s.geo);
+            return (
+              <Map stories={pseudo} onStorySelect={(s) => navigate(`/lists/${encodeURIComponent(s.handle || s.id)}`)} fitPadding={100} />
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { List as ListIcon } from 'lucide-react';
-import { SearchBar } from '@/components/SearchBar';
+import { SearchHeader } from '@/components/SearchHeader';
 import { useState, useMemo, useEffect } from 'react';
 import { useStories } from '@/hooks/useStories';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
@@ -79,32 +79,8 @@ const MentionsPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header with centered search and right nav (desktop), stacked on mobile */}
       <div className="px-4 md:px-6 pt-4">
-        <div className="hidden md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:gap-4">
-          <div />
-          <div className="justify-self-start w-full lg:w-[620px] xl:w-[720px]">
-            <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <OptionsPopover />
-            <ViewToggle mode="query" />
-          </div>
-        </div>
-        <div className="md:hidden flex flex-col gap-2">
-          <div className="w-full md:w-[720px] mx-auto">
-            <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <ViewToggle mode="query" showLabels={false} />
-          </div>
-        </div>
+        <SearchHeader viewToggleMode="query" />
       </div>
 
       <div className="px-6">
@@ -124,7 +100,7 @@ const MentionsPage = () => {
       </div>
 
       {style === 'map' ? (
-        <div className="h-[70vh] w-full">
+        <div className="h-[100svh] w-full">
           <StoriesMap
             stories={prizeStories}
             onStorySelect={(story) => {

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { List as ListIcon } from 'lucide-react';
 import { ViewToggle } from '@/components/ViewToggle';
 import { SearchBar } from '@/components/SearchBar';
+import { SearchHeader } from '@/components/SearchHeader';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
 import OptionsPopover from '@/components/OptionsPopover';
 import { useOptions } from '@/context/OptionsContext';
@@ -140,52 +141,16 @@ const GalleryPage = () => {
   })();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background mt-12">
       {/* Responsive header with padding around search */}
-      <div className="px-4 md:px-3 pt-4">
-        {/* Desktop / wide screens: row with centered search and right actions */}
-        <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4 fixedright-3">
-          <div className="hidden lg:block"/>
-          <div className="md:justify-self-start lg:justify-self-center md:w-full lg:w-[620px] xl:w-[720px]">
-            <SearchBar
-              className="w-full"
-              showFilters={filtersOpen}
-              onToggleFilters={() => setFiltersOpen(o => !o)}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2 relative">
-
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <OptionsPopover />
-            <ViewToggle mode="route" />
-
-          </div>
-        </div>
-
-        {/* Mobile: stacked search then actions */}
-        <div className="md:hidden flex flex-col gap-2">
-          <div className="w-full md:w-[720px] mx-auto">
-            <SearchBar
-              showFilters={filtersOpen}
-              onToggleFilters={() => setFiltersOpen(o => !o)}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2 relative">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <OptionsPopover />
-            <ViewToggle mode="route" />
-          </div>
-        </div>
+      <div className="fixed top-3 left-3 right-3 z-[11000]" data-lov-id="src/pages/Gallery.tsx:145:6">
+        <SearchHeader
+          dataLovId="src/pages/Gallery.tsx:145:6"
+          viewToggleMode="route"
+          showFilters={filtersOpen}
+          onToggleFilters={() => setFiltersOpen(o => !o)}
+          listsButtonVariant="outline"
+        />
       </div>
 
       {(listParam || prizeParam || q) && (

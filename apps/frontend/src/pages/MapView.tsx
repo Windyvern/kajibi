@@ -14,6 +14,7 @@ import { SearchBar } from '@/components/SearchBar';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
 import { ViewToggle } from '@/components/ViewToggle';
 import OptionsPopover from '@/components/OptionsPopover';
+import { SearchHeader } from '@/components/SearchHeader';
 import { useOptions } from '@/context/OptionsContext';
 
 const MapView = () => {
@@ -90,7 +91,7 @@ const MapView = () => {
   }, []);
   // Keep the initial FR-JP view; do not auto-refit
 
-  const handleStorySelect = (story: Story) => {
+  const handleStorySelect = (story: Story, meta?: { source?: string }) => {
     setSelectedStory(story);
     // If coming from a search hit, prefer the matched panel; otherwise clear
     const pid = q ? matchedPanelByStory[story.id] : undefined;
@@ -106,8 +107,8 @@ const MapView = () => {
     else newUrl.searchParams.delete('panel');
     window.history.replaceState({}, '', newUrl.toString());
 
-    // Center and zoom the map to the story pin (same as clicking a marker)
-    if (story.geo) {
+    // Center and zoom the map to the story pin only when not triggered by a marker click
+    if (story.geo && (!meta || meta.source !== 'marker')) {
       const view = { center: story.geo, zoom: 16 } as const;
       lastPinViewRef.current = view;
       setMapView(view);
@@ -159,12 +160,27 @@ const MapView = () => {
     visibleStories = visibleStories.filter((s) => !s.isClosed);
   }
 
-  // Center on strong match
+  // Center/zoom on strong match only for sufficiently specific queries (>=3 chars)
   useEffect(() => {
-    if (!q || !strongMatchStoryId) return;
+    if (!q || q.length < 3 || !strongMatchStoryId) return;
     const st = (stories || []).find(s => s.id === strongMatchStoryId);
     if (st?.geo) setMapView({ center: st.geo, zoom: 16 });
   }, [q, strongMatchStoryId]);
+
+  // Fit to results when user presses Enter and results are relatively few (<10)
+  useEffect(() => {
+    const fit = params.get('fit');
+    if (fit !== '1') return;
+    const arr = (q ? filtered : stories) || [];
+    const withGeo = arr.filter(s => s.geo);
+    if (withGeo.length > 0 && withGeo.length < 10) {
+      let minLat = withGeo[0]!.geo!.lat, maxLat = withGeo[0]!.geo!.lat;
+      let minLng = withGeo[0]!.geo!.lng, maxLng = withGeo[0]!.geo!.lng;
+      withGeo.forEach(s => { const g = s.geo!; minLat = Math.min(minLat, g.lat); maxLat = Math.max(maxLat, g.lat); minLng = Math.min(minLng, g.lng); maxLng = Math.max(maxLng, g.lng); });
+      const center = { lat: (minLat + maxLat)/2, lng: (minLng + maxLng)/2 };
+      setMapView(v => ({ ...v, center }));
+    }
+  }, [params.get('fit')]);
 
   // Recenter map whenever a new story is selected (if it has geo)
   useEffect(() => {
@@ -229,87 +245,31 @@ const MapView = () => {
       {/* Responsive Header: Zoom +/- (left), Search (center), Nav (right) */}
       {!selectedStory && (
         <div className="fixed top-3 left-3 right-3 z-[10000]">
-          {/* Desktop / wide screens: row layout */}
-          <div className="hidden md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] lg:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
-            {/* Left: Zoom controls (vertical: + on top) */}
-            <div className="flex flex-col items-start gap-1">
-              <Button
-                variant="default"
-                className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
-                onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom + 1)) }))}
-              >
-                <Plus size={18} />
-              </Button>
-              <Button
-                variant="default"
-                className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
-                onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
-              >
-                <Minus size={18} />
-              </Button>
-            </div>
-
-            {/* Center: Search Bar (responsive widths) */}
-            <div className="md:justify-self-start lg:justify-self-center md:w-full lg:w-[620px] xl:w-[720px]">
-              <SearchBar
-                showFilters={filtersOpen}
-                onToggleFilters={() => setFiltersOpen(o => !o)}
-              />
-            </div>
-
-            {/* Right: Closed toggle + Nav buttons (Listes left of toggle) */}
-            <div className="flex items-top top-2 justify-end gap-2 relative">
-              <Link to="/lists">
+          <SearchHeader
+            dataLovId="src/pages/MapView.tsx:231:8"
+            viewToggleMode="route"
+            showFilters={filtersOpen}
+            onToggleFilters={() => setFiltersOpen(o => !o)}
+            listsButtonVariant="default"
+            leftSlot={(
+              <div className="flex flex-col items-start gap-1">
                 <Button
                   variant="default"
-                  className="bg-white text-gray-900 rounded-full border border-black/10 shadow-md h-8 px-3 py-4 text-sm"
-                >
-                  <List size={16} className="mr-2" />
-                  Listes
-                </Button>
-              </Link>
-              <OptionsPopover />
-              <ViewToggle mode="route" />
-            </div>
-          </div>
-
-          {/* Mobile / narrow screens: column layout */}
-            <div className="md:hidden flex flex-col gap-2">
-            <div className="w-full md:w-[720px] mx-auto">
-              <SearchBar
-                showFilters={filtersOpen}
-                onToggleFilters={() => setFiltersOpen(o => !o)}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="default"
-                  className="bg-white text-gray-900 shadow-md rounded-full h-10 w-10 p-0"
-                  onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
-                >
-                  <Minus size={16} />
-                </Button>
-                <Button
-                  variant="default"
-                  className="bg-white text-gray-900 shadow-md rounded-full h-10 w-10 p-0"
+                  className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
                   onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom + 1)) }))}
                 >
-                  <Plus size={16} />
+                  <Plus size={18} />
+                </Button>
+                <Button
+                  variant="default"
+                  className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
+                  onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
+                >
+                  <Minus size={18} />
                 </Button>
               </div>
-              <div className="flex items-center gap-2 relative">
-                <Link to="/lists">
-                  <Button variant="default" className="bg-white text-gray-900 rounded-full border border-black/10 shadow-md h-8 px-3 py-4 text-sm">
-                    <List size={16} className="mr-2" />
-                    Listes
-                  </Button>
-                </Link>
-                <OptionsPopover />
-                <ViewToggle mode="route" />
-              </div>
-            </div>
-          </div>
+            )}
+          />
         </div>
       )}
       {/* Mobile Layout (rendered conditionally to avoid double-mount) */}

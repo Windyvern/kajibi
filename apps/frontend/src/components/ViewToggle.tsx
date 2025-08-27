@@ -14,9 +14,20 @@ export function ViewToggle({ mode = 'route', showLabels = true }: { mode?: 'rout
   const go = (target: 'map' | 'gallery') => {
     if (mode === 'route') {
       // Preserve query params while switching between /map and /gallery
-      const qs = params.toString();
+      const next = new URLSearchParams(params);
+      if (target === 'map' && !next.get('mv')) {
+        try {
+          const cRaw = sessionStorage.getItem('view:map:center');
+          const zRaw = sessionStorage.getItem('view:map:zoom');
+          if (cRaw && zRaw) {
+            const c = JSON.parse(cRaw) as { lat: number; lng: number };
+            const z = parseInt(zRaw, 10);
+            if (c && !Number.isNaN(z)) next.set('mv', `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(z)}`);
+          }
+        } catch {}
+      }
       const path = target === 'map' ? '/map' : '/gallery';
-      navigate(qs ? `${path}?${qs}` : path);
+      navigate({ pathname: path, search: `?${next.toString()}` });
     } else {
       const next = new URLSearchParams(params);
       if (target === 'map') next.set('style', 'map'); else next.delete('style');

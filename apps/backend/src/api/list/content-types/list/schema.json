@@ -84,6 +84,18 @@
       "relation": "manyToMany",
       "target": "api::post.post",
       "inversedBy": "lists"
+    },
+    "latitude": {
+      "type": "float",
+      "required": false
+    },
+    "longitude": {
+      "type": "float",
+      "required": false
+    },
+    "location_label": {
+      "type": "string",
+      "required": false
     }
   }
 }

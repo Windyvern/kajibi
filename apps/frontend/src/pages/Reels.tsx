@@ -10,6 +10,8 @@ import { useReels } from '@/hooks/useReels';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
 import { Map } from '@/components/Map';
 import { Story } from '@/types/story';
+import { SearchHeader } from '@/components/SearchHeader';
+import { Plus, Minus } from 'lucide-react';
 
 export default function ReelsPage() {
   const { data: stories } = useReels();
@@ -18,8 +20,21 @@ export default function ReelsPage() {
   const q = params.get('q');
   const navigate = useNavigate();
   const location = useLocation();
-  const [mapCenter] = useState<{ lat: number; lng: number }>({ lat: 41.5, lng: 70 });
-  const [mapZoom] = useState<number>(3);
+  const parseMv = () => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const mv = sp.get('mv');
+      if (!mv) return null;
+      const [latS, lngS, zS] = mv.split(',');
+      const lat = parseFloat(latS); const lng = parseFloat(lngS); const z = parseInt(zS, 10);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(z)) return { center: { lat, lng }, zoom: z } as const;
+    } catch {}
+    return null;
+  };
+  const writeMv = (center: { lat: number; lng: number }, zoom: number) => {
+    try { const sp = new URLSearchParams(window.location.search); sp.set('mv', `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`); window.history.replaceState({}, '', `${window.location.pathname}?${sp.toString()}`); } catch {}
+  };
+  const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>(() => parseMv() || { center: { lat: 41.5, lng: 70 }, zoom: 3 });
   const isMap = (params.get('style') === 'map');
 
   const reels: Story[] = useMemo(() => {
@@ -41,41 +56,11 @@ export default function ReelsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="px-4 md:px-6 pt-4">
-        <div className="hidden md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:gap-4">
-          <div />
-          <div className="justify-self-start w-full lg:w-[620px] xl:w-[720px]">
-            <SearchBar />
-          </div>
-          <div className="flex items-center justify-end gap-2 relative">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <OptionsPopover />
-            <ViewToggle mode="query" />
-          </div>
-        </div>
-        <div className="md:hidden flex flex-col gap-2">
-          <div className="w-full md:w-[720px] mx-auto">
-            <SearchBar />
-          </div>
-          <div className="flex items-center justify-end gap-2 relative">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <ViewToggle mode="query" />
-            <OptionsPopover />
-          </div>
-        </div>
+        <SearchHeader viewToggleMode="query" />
       </div>
 
       {isMap && (
-        <div className="h-[100svh]">
+        <div className="relative h-full w-full">
           <Map
             stories={visible.filter(s => s.geo)}
             onStorySelect={(story) => {
@@ -85,10 +70,13 @@ export default function ReelsPage() {
               const from = `from=${encodeURIComponent(current)}`;
               navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
             }}
-            center={mapCenter}
-            zoom={mapZoom}
+            center={mapView.center}
+            zoom={mapView.zoom}
+            onViewChange={(c,z)=> { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
             clusterAnimate={clusterAnim}
             fitPadding={80}
+            centerOffsetPixels={{ x: 0, y: -95 }}
+            offsetExternalCenter
           />
         </div>
       )}

@@ -1,10 +1,10 @@
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { List as ListIcon } from 'lucide-react';
-import { SearchBar } from '@/components/SearchBar';
+import { SearchHeader } from '@/components/SearchHeader';
 import { useState, useMemo, useEffect } from 'react';
 import { useAuthors } from '@/hooks/useAuthors';
 import { useStories } from '@/hooks/useStories';
+import { useSearchFilter } from '@/hooks/useSearchFilter';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
 import { useAuthorPosts, useAuthorReels } from '@/hooks/useAuthorMedia';
 import { ViewToggle } from '@/components/ViewToggle';
@@ -25,6 +25,11 @@ const AuthorDetailPage = () => {
     if (!author || !stories) return [];
     return stories.filter(s => (s.author || '').trim() === (author.name || '').trim());
   }, [author, stories]);
+  const q = params.get('q') || '';
+  const sf = params.get('sf') || 't,u,a,d,i';
+  const fields = { title: sf.includes('t'), username: sf.includes('u'), address: sf.includes('a'), description: sf.includes('d'), images: sf.includes('i') } as const;
+  const { filtered } = useSearchFilter(authorStories, q, fields);
+  const visibleStories = q ? filtered : authorStories;
   const { data: posts } = useAuthorPosts(author?.slug || author?.name);
   const { data: reels } = useAuthorReels(author?.slug || author?.name);
   const [tab, setTab] = useState<'stories'|'posts'|'reels'>('stories');
@@ -51,30 +56,8 @@ const AuthorDetailPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header with centered search and right nav (desktop), stacked on mobile */}
-      <div className="px-4 md:px-6 pt-4">
-        <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
-          <div />
-          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
-            <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="md:hidden flex flex-col gap-2">
-          <div className="w-full md:w-[720px] mx-auto">
-            <SearchBar showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o => !o)} />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-          </div>
-        </div>
+      <div className="px-4 md:px-6 pt-4 mb-2">
+        <SearchHeader />
       </div>
 
       <div className="px-6">
@@ -91,7 +74,7 @@ const AuthorDetailPage = () => {
           </div>
           <h2 className="text-2xl font-bold text-foreground">{author.name}</h2>
         </div>
-        <div className="flex items-center gap-3 border-b border-border mb-4" data-lov-id="src/pages/AuthorDetail.tsx:102:8">
+        <div className="flex items-center gap-3 border-b border-border" data-lov-id="src/pages/AuthorDetail.tsx:102:8">
           {[
             { key: 'stories', label: 'Stories' },
             { key: 'posts', label: 'Posts' },
@@ -106,19 +89,19 @@ const AuthorDetailPage = () => {
             </button>
           ))}
           {/* View toggle moved here; icon-only on mobile */}
-          <div className="ml-auto hidden md:block">
+          <div className="ml-auto hidden mb-2 md:block">
             <ViewToggle mode="query" />
           </div>
-          <div className="ml-auto md:hidden">
+          <div className="ml-auto mb-2 md:hidden">
             <ViewToggle mode="query" showLabels={false} />
           </div>
         </div>
       </div>
       {tab === 'stories' && (
         style === 'map' ? (
-          <div className="h-[70vh] w-full">
+          <div className="h-[70vh] w-full flex flex-col justify-end bg-gray-100">
             <StoriesMap
-              stories={authorStories}
+              stories={visibleStories}
               onStorySelect={(story) => {
                 const current = `${location.pathname}${location.search}`;
                 const base = `/story/${encodeURIComponent(story.handle || story.id)}`;
@@ -133,7 +116,7 @@ const AuthorDetailPage = () => {
           </div>
         ) : (
           <LatestArticlesGallery
-            stories={authorStories}
+            stories={visibleStories}
             onSelect={(story) => {
               const current = `${location.pathname}${location.search}`;
               try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}

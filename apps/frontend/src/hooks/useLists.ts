@@ -9,6 +9,9 @@ export interface ListItem {
   articleCount?: number;
   description?: string;
   category?: string;
+  latitude?: number;
+  longitude?: number;
+  location_label?: string;
 }
 
 function getMediaUrl(file: any): string | undefined {
@@ -38,6 +41,9 @@ export const useLists = () => {
             thumbnail: getMediaUrl(attrs.cover),
             description: attrs.description,
             category: attrs.category?.data?.attributes?.name || attrs.category?.name,
+            latitude: attrs.latitude,
+            longitude: attrs.longitude,
+            location_label: attrs.location_label,
             articleCount: Array.isArray(attrs.articles)
               ? attrs.articles.length
               : Array.isArray(attrs.articles?.data)
