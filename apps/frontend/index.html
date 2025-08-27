@@ -20,6 +20,14 @@
 
   <body>
     <div id="root"></div>
+    <!-- Expose Leaflet instance globally before loading double-tap-drag plugins -->
+    <script type="module">
+      import L from 'leaflet';
+      // @ts-ignore
+      window.L = L;
+    </script>
+    <script src="https://unpkg.com/leaflet-doubletapdrag"></script>
+    <script src="https://unpkg.com/leaflet-doubletapdragzoom"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

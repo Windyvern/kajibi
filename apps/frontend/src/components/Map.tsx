@@ -7,6 +7,8 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import { Story } from '@/types/story';
 
+// Plugins are loaded via script tags in index.html; no dynamic loader here
+
 // Cache fetched SVGs by URL to avoid repeated network requests
 const svgCache: Map<string, string> = new globalThis.Map<string, string>();
 let prizeSvgCounter = 0;
@@ -110,6 +112,11 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
+  // Track last stories signature to avoid unnecessary marker rebuilds
+  const lastStoriesSigRef = useRef<string | null>(null);
+  // Keep latest onStorySelect without retriggering marker rebuilds
+  const onStorySelectRef = useRef(onStorySelect);
+  useEffect(() => { onStorySelectRef.current = onStorySelect; }, [onStorySelect]);
   const lastFitKeyRef = useRef<string | null>(null);
   // Render zone padding per spec: +64 left/right, +200 bottom (top = 0)
   const renderPad = useRef<{ left: number; right: number; bottom: number; top: number }>({ left: 64, right: 64, bottom: 200, top: 0 });
@@ -125,30 +132,46 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
-    // Initialize map
-    const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
-    const initZoom: number = typeof zoom === 'number' ? zoom : 4;
-    mapInstanceRef.current = L.map(mapRef.current, {
-      zoomControl: false,
-      zoomAnimation: true,
-      markerZoomAnimation: true,
-      fadeAnimation: true,
-    }).setView(initCenter, initZoom);
+      // Initialize map
+      const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
+      const initZoom: number = typeof zoom === 'number' ? zoom : 4;
+      mapInstanceRef.current = L.map(mapRef.current, {
+        zoomControl: false,
+        zoomAnimation: true,
+        markerZoomAnimation: true,
+        fadeAnimation: true,
+      // Use discrete zoom levels for snappier wheel zoom on desktop
+      zoomSnap: 1,
+        // Make mouse wheel zoom more responsive/faster
+        wheelPxPerZoomLevel: 35,
+        wheelDebounceTime: 10,
+        // Keep the default step for +/- controls
+        zoomDelta: 1,
+        // Use DoubleTapDragZoom plugin with Google Maps-like behavior
+        // @ts-ignore plugin option
+        doubleTapDragZoom: 'center',
+        // @ts-ignore plugin option
+        doubleTapDragZoomOptions: { reverse: true },
+      }).setView(initCenter, initZoom);
 
     // Add tile layer (Carto light style to match legacy design)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap, &copy; CARTO',
-      subdomains: 'abcd'
+      subdomains: 'abcd',
+      updateWhenZooming: false,
+      updateWhenIdle: true,
+      keepBuffer: 2,
     }).addTo(mapInstanceRef.current);
 
     // Initialize marker cluster group
+    const useNativeClick = nativeClusterClick || (typeof window !== 'undefined' && window.innerWidth < 768);
     markersRef.current = L.markerClusterGroup({
       // Larger cluster radius at low/mid zoom; smaller at neighborhood/street level
       maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function'
         ? clusterRadiusByZoom(z)
         : (z < 6 ? 120 : z < 12 ? 90 : 50)),
-      zoomToBoundsOnClick: false,
-      spiderfyOnEveryClick: nativeClusterClick,
+      zoomToBoundsOnClick: useNativeClick,
+      spiderfyOnEveryClick: useNativeClick,
       // Keep markers rendered even when slightly offscreen to avoid despawn
       removeOutsideVisibleBounds: false,
       // Enable animated expand/collapse during zoom (controlled by prop)
@@ -186,7 +209,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   mapInstanceRef.current.addLayer(markersRef.current);
 
     // Apply custom padding when clicking clusters (override default focus)
-    if (!nativeClusterClick) markersRef.current.on('clusterclick', (a: any) => {
+    if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
       try {
         const b = a.layer.getBounds();
         const map = mapInstanceRef.current;
@@ -422,12 +445,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
-      // Clean up styles
-      if (styleEl.parentNode) {
+      if (styleEl && styleEl.parentNode) {
         styleEl.parentNode.removeChild(styleEl);
       }
     };
   }, []);
+
+  // DoubleTapDragZoom plugin handles one-finger double-tap and drag zoom; custom handler removed
 
   // Recreate cluster group when clusterAnimate toggles
   useEffect(() => {
@@ -436,12 +460,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     if (markersRef.current) {
       try { map.removeLayer(markersRef.current); } catch {}
     }
+    const useNativeClick = nativeClusterClick || (typeof window !== 'undefined' && window.innerWidth < 768);
     markersRef.current = L.markerClusterGroup({
       maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function'
         ? clusterRadiusByZoom(z)
         : (z < 6 ? 120 : z < 12 ? 90 : 50)),
-      zoomToBoundsOnClick: false,
-      spiderfyOnEveryClick: nativeClusterClick,
+      zoomToBoundsOnClick: useNativeClick,
+      spiderfyOnEveryClick: useNativeClick,
       removeOutsideVisibleBounds: false,
       animate: clusterAnimate,
       animateAddingMarkers: clusterAnimate,
@@ -473,7 +498,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     });
     map.addLayer(markersRef.current);
     // Rebind cluster click with custom padding after recreation
-    if (!nativeClusterClick) markersRef.current.on('clusterclick', (a: any) => {
+    if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
       try {
         const b = a.layer.getBounds();
         const extraLR = 50, extraTB = 100;
@@ -503,6 +528,22 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
   useEffect(() => {
     if (!mapInstanceRef.current || !markersRef.current) return;
+
+    // Build a stable signature of the stories list (id + coords + thumbnail used for marker)
+    const sig = (() => {
+      try {
+        return (stories || [])
+          .map((s) => `${s.id}:${s.geo ? `${s.geo.lat.toFixed(6)},${s.geo.lng.toFixed(6)}` : 'n'}`)
+          .join('|');
+      } catch {
+        return String((stories || []).length);
+      }
+    })();
+    if (lastStoriesSigRef.current === sig) {
+      // No meaningful change; keep existing markers to prevent flicker
+      return;
+    }
+    lastStoriesSigRef.current = sig;
 
     // Clear existing markers
     markersRef.current.clearLayers();
@@ -559,7 +600,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   (marker as any).thumbnailUrl = thumbnailUrl;
   (marker as any).isClosed = story.isClosed;
       
-  marker.on('click', () => {
+      marker.on('click', () => {
         if (!suppressZoomOnMarkerClick) {
           // Center and zoom to street level before opening the story
           if (mapInstanceRef.current) {
@@ -589,7 +630,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
             }
           }
         }
-        onStorySelect(story, { source: 'marker' });
+        try { onStorySelectRef.current?.(story, { source: 'marker' }); } catch {}
       });
 
       // Remember target so we can re-center after layout changes
@@ -622,7 +663,11 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
           .catch(() => {});
       }
     });
-  }, [stories, onStorySelect, selectedStoryId, clusterAnimate]);
+
+    // After adding markers, refresh clusters and ensure layout is valid
+    try { (markersRef.current as any).refreshClusters?.(); } catch {}
+    try { mapInstanceRef.current.invalidateSize(); } catch {}
+  }, [stories, clusterAnimate]);
 
   // Apply external center/zoom changes without creating feedback loops
   useEffect(() => {

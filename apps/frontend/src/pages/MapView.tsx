@@ -48,13 +48,29 @@ const MapView = () => {
     return null;
   };
 
+  // Debounced mv writer to avoid spamming navigate during wheel zoom
+  const mvTimerRef = useRef<number | null>(null);
+  const prevMvRef = useRef<string | null>(null);
   const writeMv = (center: { lat: number; lng: number }, zoom: number) => {
     try {
-      const sp = new URLSearchParams(location.search);
-      sp.set('mv', `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`);
-      navigate({ pathname: location.pathname, search: `?${sp.toString()}` }, { replace: true });
+      const current = new URL(window.location.href);
+      const sp = current.searchParams;
+      const nextMv = `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`;
+      if (prevMvRef.current === nextMv) return; // no change
+      if (mvTimerRef.current) window.clearTimeout(mvTimerRef.current);
+      mvTimerRef.current = window.setTimeout(() => {
+        try {
+          const latest = new URL(window.location.href);
+          const params = latest.searchParams;
+          params.set('mv', nextMv);
+          navigate({ pathname: latest.pathname, search: `?${params.toString()}` }, { replace: true });
+          prevMvRef.current = nextMv;
+        } catch {}
+      }, 200); // debounce delay
     } catch {}
   };
+
+  useEffect(() => () => { if (mvTimerRef.current) window.clearTimeout(mvTimerRef.current); }, []);
 
   const computeInitialView = () => {
     // 1) Respect explicit mv param if present in URL
@@ -122,7 +138,8 @@ const MapView = () => {
     newUrl.searchParams.set('story', slug);
     if (pid) newUrl.searchParams.set('panel', pid);
     else newUrl.searchParams.delete('panel');
-    window.history.replaceState({}, '', newUrl.toString());
+    // Push a new history entry so the browser back button closes the viewer
+    try { window.history.pushState({}, '', newUrl.toString()); } catch { window.history.replaceState({}, '', newUrl.toString()); }
 
     // Center and zoom the map to the story pin only when not triggered by a marker click
     if (story.geo && (!meta || meta.source !== 'marker')) {
@@ -149,6 +166,16 @@ const MapView = () => {
     newUrl.searchParams.delete('panel');
     window.history.replaceState({}, '', newUrl.toString());
   };
+
+  // Close the story viewer when the URL no longer has ?story=...
+  useEffect(() => {
+    const slug = params.get('story');
+    if (!slug && selectedStory) {
+      setSelectedStory(null);
+      setSelectedPanelId(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.get('story')]);
 
   // Close with Escape key when a story is open
   useEffect(() => {
@@ -473,7 +500,7 @@ const MapView = () => {
                 selectedStoryId={undefined}
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
-                onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
+                onViewChange={(c, z) => { writeMv(c, z); }}
                 onBoundsChange={(b) => {
                   try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                 }}
@@ -499,7 +526,7 @@ const MapView = () => {
                       selectedStoryId={selectedStory?.id}
                       center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                       zoom={mapView.zoom}
-                      onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
+                      onViewChange={(c, z) => { writeMv(c, z); }}
                       onBoundsChange={(b) => {
                         try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                       }}

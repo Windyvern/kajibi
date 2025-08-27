@@ -2,6 +2,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import { StoryPanelData } from "@/types/story";
+import { getMute, setMute } from "@/lib/muteBus";
 
 interface StoryPanelProps {
   panel: StoryPanelData;
@@ -14,21 +15,13 @@ interface StoryPanelProps {
 
 export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoMeta, onVideoTime, onVideoEnded }: StoryPanelProps) => {
   // Persist mute state for the session; default to true (muted) at session start
-  const STORAGE_KEY = 'storyViewer:muted';
-  const readInitialMuted = () => {
-    try {
-      const v = sessionStorage.getItem(STORAGE_KEY);
-      if (v === 'false') return false; // user previously unmuted in this session
-    } catch {}
-    return true;
-  };
-  const [muted, setMuted] = useState<boolean>(readInitialMuted());
+  const [muted, setMuted] = useState<boolean>(getMute());
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [pausedInternal, setPausedInternal] = useState(true);
 
   useEffect(() => {
     // On media change, respect session preference (default muted)
-    const pref = readInitialMuted();
+    const pref = getMute();
     setMuted(pref);
     if (videoRef.current) videoRef.current.muted = pref;
     // Attempt autoplay muted on mount/change
@@ -48,26 +41,24 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
     const next = !muted;
     setMuted(next);
     v.muted = next;
-    try { sessionStorage.setItem(STORAGE_KEY, String(next)); } catch {}
+    try { setMute(next); } catch {}
     if (!next) {
       // Ensure playback resumes with audio after a user gesture
       v.play().catch(() => {});
     }
   };
 
-  // Allow parent to toggle mute without rendering the button here
+  // Allow parent to sync mute without rendering the button here
   const lastToggleRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (externalMuteToggle == null) return;
     if (lastToggleRef.current === externalMuteToggle) return;
     lastToggleRef.current = externalMuteToggle;
     const v = videoRef.current;
-    if (!v) return;
-    const next = !muted;
-    setMuted(next);
-    v.muted = next;
-    try { sessionStorage.setItem(STORAGE_KEY, String(next)); } catch {}
-    if (!next) { v.play().catch(() => {}); }
+    const target = getMute();
+    setMuted(target);
+    if (v) v.muted = target;
+    if (!target) { try { v?.play(); } catch {} }
   }, [externalMuteToggle]);
 
   // React to external pause/resume

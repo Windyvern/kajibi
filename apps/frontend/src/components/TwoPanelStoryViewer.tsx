@@ -7,6 +7,7 @@ import { StoryGalleryOverlay } from "./StoryGalleryOverlay";
 import { StoryMetadata } from "./StoryMetadata";
 import { Story } from "@/types/story";
 import { useSwipeGestures } from "@/hooks/useSwipeGestures";
+import { getMute, setMute } from "@/lib/muteBus";
 
 interface TwoPanelStoryViewerProps {
   initialStoryId?: string;
@@ -41,10 +42,7 @@ export const TwoPanelStoryViewer = ({
   const [pausedPersistent, setPausedPersistent] = useState(false);
   const [holdPaused, setHoldPaused] = useState(false);
   // Mute UI state kept in parent so button aligns consistently; StoryPanel enforces actual mute
-  const readInitialMuted = () => {
-    try { const v = sessionStorage.getItem('storyViewer:muted'); return v === 'false' ? false : true; } catch { return true; }
-  };
-  const [mutedUI, setMutedUI] = useState<boolean>(readInitialMuted());
+  const [mutedUI, setMutedUI] = useState<boolean>(getMute());
   const [muteToggleTick, setMuteToggleTick] = useState(0);
   const [showSwipeHint, setShowSwipeHint] = useState(false);
   const [panelProgress, setPanelProgress] = useState(0); // 0..1
@@ -243,9 +241,10 @@ export const TwoPanelStoryViewer = ({
   }, [currentPanelIndex, currentStoryIndex, currentPanel?.type, pausedPersistent, holdPaused, showGallery, panelDuration]);
 
   // Keep UI mute state in sync with session pref on panel change
-  useEffect(() => {
-    setMutedUI(readInitialMuted());
-  }, [currentPanelIndex]);
+  useEffect(() => { setMutedUI(getMute()); }, [currentPanelIndex]);
+
+  // Intentionally do not subscribe to global mute while the viewer is open;
+  // the local toggle controls the global bus, not the other way around.
 
   // (moved below isMdUp declaration)
 
@@ -324,6 +323,33 @@ export const TwoPanelStoryViewer = ({
     }
     return false;
   });
+  
+  // Lock page scroll on mobile while the viewer is open
+  useEffect(() => {
+    if (isMdUp) return;
+    const { body, documentElement } = document;
+    const prevBodyOverflow = body.style.overflow;
+    const prevHtmlOverflow = documentElement.style.overflow;
+    const prevBodyPos = body.style.position;
+    const prevBodyWidth = body.style.width;
+    const prevBodyTouch = (body.style as any).touchAction || '';
+    try {
+      body.style.overflow = 'hidden';
+      documentElement.style.overflow = 'hidden';
+      body.style.position = 'fixed';
+      body.style.width = '100%';
+      (body.style as any).touchAction = 'none';
+    } catch {}
+    return () => {
+      try {
+        body.style.overflow = prevBodyOverflow;
+        documentElement.style.overflow = prevHtmlOverflow;
+        body.style.position = prevBodyPos;
+        body.style.width = prevBodyWidth;
+        (body.style as any).touchAction = prevBodyTouch;
+      } catch {}
+    };
+  }, [isMdUp]);
   
   useEffect(() => {
     const updateAspectRatio = () => {
@@ -417,11 +443,56 @@ export const TwoPanelStoryViewer = ({
     return x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
   };
 
+  // Pinch-to-close gesture tracking (two-finger inward pinch)
+  const pinchRef = useRef<{ start?: number; active?: boolean }>({ start: undefined, active: false });
+  const onTouchStartPinch = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current.start = Math.hypot(dx, dy);
+      pinchRef.current.active = true;
+    }
+  };
+  const onTouchMovePinch = (e: React.TouchEvent) => {
+    if (pinchRef.current.active && e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const start = pinchRef.current.start || dist;
+      if (start > 0) {
+        const scale = dist / start;
+        if (scale < 0.8) {
+          pinchRef.current.active = false;
+          if (onClose) onClose();
+        }
+      }
+    }
+  };
+
+  // Compose swipe + pinch handlers so both work
+  const composedTouchStart: React.TouchEventHandler = (e) => {
+    try { mobileSwipeHandlers.onTouchStart?.(e as any); } catch {}
+    onTouchStartPinch(e);
+  };
+  const composedTouchMove: React.TouchEventHandler = (e) => {
+    try { mobileSwipeHandlers.onTouchMove?.(e as any); } catch {}
+    onTouchMovePinch(e);
+  };
+  const composedTouchEnd: React.TouchEventHandler = (e) => {
+    try { mobileSwipeHandlers.onTouchEnd?.(e as any); } catch {}
+  };
+
   const mobileLayout = (
     <div 
-      className="relative min-h-screen overflow-hidden"
+      className="fixed inset-0 overflow-hidden"
+      style={{ height: '100svh', touchAction: 'none' }}
       ref={containerRef}
-      {...mobileSwipeHandlers}
+      onTouchStart={composedTouchStart}
+      onTouchMove={composedTouchMove}
+      onTouchEnd={composedTouchEnd}
+      onMouseDown={mobileSwipeHandlers.onMouseDown as any}
+      onMouseMove={mobileSwipeHandlers.onMouseMove as any}
+      onMouseUp={mobileSwipeHandlers.onMouseUp as any}
       onWheel={(e) => {
         // Allow opening with either direction to match user expectation
         if (!showMetadataPanel && (e.deltaY < -30 || e.deltaY > 60)) setShowMetadataPanel(true);
@@ -462,26 +533,26 @@ export const TwoPanelStoryViewer = ({
       </button>
 
       {/* Pause/Play toggle under gallery button */}
-      <button
-        onClick={() => setPausedPersistent((p) => !p)}
-        className="absolute top-32 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
-        aria-label={(pausedPersistent || holdPaused) ? 'Play' : 'Pause'}
-        data-ui-control="true"
-      >
-        {(pausedPersistent || holdPaused) ? <Play size={20} /> : <Pause size={20} />}
-      </button>
-
-      {/* Mute/Unmute aligned with controls, only for videos */}
-      {currentPanel?.type === 'video' && (
         <button
-          onClick={() => { setMutedUI((m) => { const v = !m; try { sessionStorage.setItem('storyViewer:muted', String(v)); } catch {}; return v; }); setMuteToggleTick((t) => t + 1); }}
-          className="absolute top-44 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
-          aria-label={mutedUI ? 'Unmute' : 'Mute'}
+          onClick={() => setPausedPersistent((p) => !p)}
+          className="absolute top-32 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+          aria-label={(pausedPersistent || holdPaused) ? 'Play' : 'Pause'}
           data-ui-control="true"
         >
-          {mutedUI ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          {(pausedPersistent || holdPaused) ? <Play size={20} /> : <Pause size={20} />}
         </button>
-      )}
+
+        {/* Mute/Unmute aligned with controls, only for videos */}
+        {currentPanel?.type === 'video' && (
+          <button
+            onClick={() => { setMutedUI((m) => { const v = !m; setMute(v); return v; }); setMuteToggleTick((t) => t + 1); }}
+            className="absolute top-44 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
+            aria-label={mutedUI ? 'Unmute' : 'Mute'}
+            data-ui-control="true"
+          >
+            {mutedUI ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          </button>
+        )}
 
       <div 
         className="w-full h-screen cursor-pointer bg-black flex items-center justify-center"
@@ -635,7 +706,7 @@ export const TwoPanelStoryViewer = ({
 
           {currentPanel?.type === 'video' && (
             <button
-              onClick={() => { setMutedUI((m) => { const v = !m; try { sessionStorage.setItem('storyViewer:muted', String(v)); } catch {}; return v; }); setMuteToggleTick((t) => t + 1); }}
+              onClick={() => { setMutedUI((m) => { const v = !m; setMute(v); return v; }); setMuteToggleTick((t) => t + 1); }}
               className="absolute top-44 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
               aria-label={mutedUI ? 'Unmute' : 'Mute'}
               data-ui-control="true"

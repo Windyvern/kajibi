@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
 import { Map } from '@/components/Map';
@@ -41,13 +41,27 @@ const GalleryPage = () => {
     return null;
   };
   const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>(() => parseMv() || { center: { lat: 41.5, lng: 70 }, zoom: 3 });
+  // Debounced mv writer to avoid spamming navigate during wheel zoom in map-in-gallery mode
+  const mvTimerRef = useRef<number | null>(null);
+  const prevMvRef = useRef<string | null>(null);
   const writeMv = (center: { lat: number; lng: number }, zoom: number) => {
     try {
-      const next = new URLSearchParams(location.search);
-      next.set('mv', `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`);
-      navigate({ pathname: location.pathname, search: `?${next.toString()}` }, { replace: true });
+      const nextMv = `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`;
+      if (prevMvRef.current === nextMv) return;
+      if (mvTimerRef.current) window.clearTimeout(mvTimerRef.current);
+      mvTimerRef.current = window.setTimeout(() => {
+        try {
+          const latest = new URL(window.location.href);
+          const params = latest.searchParams;
+          params.set('mv', nextMv);
+          navigate({ pathname: latest.pathname, search: `?${params.toString()}` }, { replace: true });
+          prevMvRef.current = nextMv;
+        } catch {}
+      }, 200);
     } catch {}
   };
+
+  useEffect(() => () => { if (mvTimerRef.current) window.clearTimeout(mvTimerRef.current); }, []);
   // Restore scroll if returning from a story in gallery context
   const locKey = `${location.pathname}${location.search}`;
   useEffect(() => {

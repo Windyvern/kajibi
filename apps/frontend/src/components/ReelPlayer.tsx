@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pause, Play, Volume2, VolumeX, X } from 'lucide-react';
+import { getMute, setMute } from '@/lib/muteBus';
 
 interface ReelPlayerProps {
   src: string;
@@ -11,7 +12,7 @@ interface ReelPlayerProps {
 export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: ReelPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(autoPlay);
-  const [isMuted, setIsMuted] = useState<boolean>(muted);
+  const [isMuted, setIsMuted] = useState<boolean>(getMute());
   const [progress, setProgress] = useState<number>(0); // 0..1
   const [duration, setDuration] = useState<number>(0);
 
@@ -43,7 +44,13 @@ export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: Reel
   }, [isPlaying, isMuted]);
 
   const togglePlay = () => setIsPlaying(p => !p);
-  const toggleMute = () => setIsMuted(m => !m);
+  const toggleMute = () => {
+    setIsMuted((m) => {
+      const next = !m;
+      setMute(next);
+      return next;
+    });
+  };
 
   const onSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const el = e.currentTarget;

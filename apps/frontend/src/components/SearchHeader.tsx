@@ -1,4 +1,4 @@
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { SearchBar } from '@/components/SearchBar';
 import { ViewToggle } from '@/components/ViewToggle';
@@ -26,6 +26,19 @@ export function SearchHeader({
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  // Hidden global mute tracker so pages can query this header if needed
+  const [__muted, set__muted] = useState<boolean>(() => {
+    try { return (sessionStorage.getItem('storyViewer:muted') ?? 'true') !== 'false'; } catch { return true; }
+  });
+  useEffect(() => {
+    const onEvt = (e: Event) => {
+      // @ts-ignore
+      const v = (e as CustomEvent)?.detail?.muted;
+      if (typeof v === 'boolean') set__muted(v);
+    };
+    window.addEventListener('global:mute-change', onEvt as EventListener);
+    return () => window.removeEventListener('global:mute-change', onEvt as EventListener);
+  }, []);
   const current = useMemo(() => {
     const p = location.pathname;
     if (p.startsWith('/posts') || p.startsWith('/post/')) return 'Posts';
