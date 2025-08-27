@@ -51,6 +51,73 @@ const extractMentions = (title?: string): string[] => {
   return Array.from(out);
 };
 
+// Try to read GPS coordinates from an Instagram JSON item
+const extractGpsFromItem = (item: any): { lat: number; lon: number } | null => {
+  const tryNum = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const lat = tryNum(pickField(item, [
+    'media_map_data.0.lat', 'media_map_data.0.latitude', 'media_map_data.lat', 'media_map_data.latitude',
+    'location.latitude', 'lat', 'latitude'
+  ]));
+  const lon = tryNum(pickField(item, [
+    'media_map_data.0.long', 'media_map_data.0.lng', 'media_map_data.0.longitude', 'media_map_data.long', 'media_map_data.longitude',
+    'location.longitude', 'lng', 'long', 'longitude'
+  ]));
+  if (lat != null && lon != null) return { lat, lon };
+  return null;
+};
+
+// Parse timestamp from our IG-imported filename pattern: user_YYYY-MM-DD_HH-mm-ss.ext
+const parseTsFromName = (name?: string): number | null => {
+  try {
+    if (!name) return null;
+    const base = String(name).replace(/\.[^.]+$/, '');
+    const m = base.match(/_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})(?:$|[_-])/);
+    if (!m) return null;
+    const [_, y, mo, d, h, mi, s] = m;
+    const iso = `${y}-${mo}-${d}T${h}:${mi}:${s}Z`;
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? t : null;
+  } catch { return null; }
+};
+
+// Ensure Article.media list is sorted by underlying media timestamp and updated in Strapi
+const sortArticleMediaByDate = async (strapi: any, articleId: number) => {
+  try {
+    const populated = await strapi.entityService.findOne('api::article.article', articleId, { populate: { media: true } });
+    const list = Array.isArray((populated as any)?.media?.data)
+      ? (populated as any).media.data
+      : (Array.isArray((populated as any)?.media) ? (populated as any).media : []);
+    if (!Array.isArray(list) || !list.length) return;
+    const items = list.map((m: any) => {
+      const attrs = m?.attributes || m;
+      const name = attrs?.name || attrs?.filename || '';
+      const createdAt = attrs?.createdAt ? Date.parse(attrs.createdAt) : 0;
+      const ts = parseTsFromName(name) || createdAt || 0;
+      return { id: attrs?.id || m?.id, ts };
+    }).filter((x: any) => x && x.id);
+    items.sort((a: any, b: any) => a.ts - b.ts);
+    const orderedIds = items.map((x: any) => x.id);
+    await strapi.entityService.update('api::article.article', articleId, { data: { media: orderedIds } });
+  } catch {}
+};
+
+// Append alternative text line (if any) into Article.description without duplicates
+const appendAltToDescription = async (strapi: any, articleId: number, alt?: string) => {
+  try {
+    const txt = (alt || '').trim();
+    if (!txt) return;
+    const art = await strapi.entityService.findOne('api::article.article', articleId, { fields: ['description'] });
+    const current = (art as any)?.description || '';
+    const lines = current ? String(current).split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : [];
+    if (lines.includes(txt)) return;
+    lines.push(txt);
+    await strapi.entityService.update('api::article.article', articleId, { data: { description: lines.join('\n') } });
+  } catch {}
+};
+
 const ensureFolder = async (strapi: any, name: string) => {
   const pathWanted = `/${name}`;
   const byPath = await strapi.entityService.findMany('plugin::upload.folder', {
@@ -267,11 +334,13 @@ const processCategory = async (
   stats.byCategory[catKey].items += items.length;
 
   try { strapi.log.info(`[ig-import] processing ${items.length} items for ${cat.folderName}`); } catch {}
+  // Track earliest GPS seen to resolve conflicts
+  let earliestGps: { ts: number; lat: number; lon: number } | null = null;
   for (const item of items) {
     if (!item) continue;
     const rel = pickField(item, ['uri', 'path', 'media[0].uri', 'attachments[0].data.uri', 'media_map_data.0.uri']);
     const ts = pickField(item, ['creation_timestamp', 'taken_at', 'media[0].creation_timestamp']);
-    const titleRaw = pickField(item, ['title', 'caption', 'media[0].title', 'string_map_data.Caption.value']) || '';
+  const titleRaw = pickField(item, ['title', 'caption', 'media[0].title', 'string_map_data.Caption.value']) || '';
     const title = fixMojibake((typeof titleRaw === 'string' ? titleRaw : String(titleRaw || '')).normalize('NFC'));
     if (!rel || !ts) { try { strapi.log.debug(`[ig-import] skip item missing rel/ts rel=${!!rel} ts=${!!ts}`); } catch {} continue; }
     const mentions = extractMentions(title);
@@ -300,7 +369,7 @@ const processCategory = async (
     let targetExt = ext;
     let targetName = `${baseName}${targetExt}`;
 
-    const exists = await strapi.entityService.findMany('plugin::upload.file', { filters: { name: targetName }, limit: 1 });
+  const exists = await strapi.entityService.findMany('plugin::upload.file', { filters: { name: targetName }, limit: 1 });
     if (exists && exists[0]) continue;
 
     let tmpOut = srcPath;
@@ -331,11 +400,11 @@ const processCategory = async (
         // Provide a stream explicitly to satisfy upload service
         stream: fs.createReadStream(tmpOut),
       } as any;
-      const data = {
+    const data = {
         fileInfo: {
           name: targetName,
           alternativeText: fixMojibake(title || '') || undefined,
-          caption: fixMojibake(mentions.join(' ')),
+      caption: fixMojibake(mentions.join(' ')),
         },
       } as any;
       // In Strapi v5, target folders are specified via data.folder
@@ -354,7 +423,7 @@ const processCategory = async (
         stats.uploadErrors += 1;
         continue;
       }
-      const createdFile = Array.isArray(created) ? created[0] : created;
+  const createdFile = Array.isArray(created) ? created[0] : created;
       try { await strapi.entityService.update('plugin::upload.file', createdFile.id, { data: { mime: guessed, ext: targetExt } }); } catch {}
       // Ensure file is placed into the expected folder (in case upload service ignores data.folder)
       try {
@@ -370,7 +439,7 @@ const processCategory = async (
       stats.byCategory[catKey].uploaded += 1;
       if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0);
       // Normalize mentions to lowercase for matching
-      const usernames = (mentions.length ? mentions : [`@${usernameFromZip}`]).map((u: string) => u.toLowerCase());
+  const usernames = (mentions.length ? mentions : [`@${usernameFromZip}`]).map((u: string) => u.toLowerCase());
       const truncate = (s: string, max: number) => {
         const arr = [...(s || '')];
         return arr.length > max ? arr.slice(0, max).join('') : s;
@@ -381,7 +450,7 @@ const processCategory = async (
       const isPosts = key === 'posts';
       const isReels = key === 'reels';
 
-      if (isPosts || isReels) {
+  if (isPosts || isReels) {
         // Create or update a Post/Reel entity; do not attach media directly to Article
         const sourceId = targetName.replace(/\.[^.]+$/, '');
         const contentType = isPosts ? 'api::post.post' : 'api::reel.reel';
@@ -486,6 +555,47 @@ const processCategory = async (
       }
 
       // Stories: attach media to Article and update dates
+      // First, accumulate GPS and location if any, preferring the oldest timestamp
+      try {
+        const gps = extractGpsFromItem(item);
+        if (gps && typeof ts === 'number') {
+          if (!earliestGps || ts < earliestGps.ts) {
+            earliestGps = { ts, lat: gps.lat, lon: gps.lon };
+          }
+        }
+      } catch {}
+      // If there are no mentions but GPS exists, create a placeholder article keyed by GPS
+      const gps = extractGpsFromItem(item);
+      if ((!usernames || usernames.length === 0) && gps) {
+        const key = `${gps.lat.toFixed(6)},${gps.lon.toFixed(6)}`;
+        let slugBase = key.replace(/[^0-9.,-]/g, '').replace(/\s+/g, '-');
+        let slug = `loc-${slugBase}`;
+        try {
+          // Ensure slug is unique by appending random token if needed
+          const exists = await strapi.entityService.findMany('api::article.article', { filters: { slug }, limit: 1 });
+          if (exists && exists[0]) slug = `loc-${slugBase}-${Math.random().toString(36).slice(2, 6)}`;
+        } catch {}
+        let article = await strapi.entityService.create('api::article.article', {
+          data: {
+            title: key,
+            slug,
+            username: undefined,
+            description: title || '',
+            latitude: gps.lat,
+            longitude: gps.lon,
+            publishedAt: new Date().toISOString(),
+            ...(CURRENT_AUTHOR_ID ? { author: CURRENT_AUTHOR_ID } : {}),
+          },
+        });
+        if (article?.id) { touchedArticleIds.add(article.id); stats.articlesCreated += 1; }
+        try { await strapi.entityService.update('api::article.article', article.id, { data: { media: { connect: [createdFile.id] } } }); } catch {}
+        // Append alt text to description and re-sort media
+        try { await appendAltToDescription(strapi, article.id, (createdFile as any)?.alternativeText || (createdFile as any)?.caption); } catch {}
+        await sortArticleMediaByDate(strapi, article.id);
+        // Set search/location helper fields if present
+        try { await strapi.entityService.update('api::article.article', article.id, { data: { latitude: gps.lat, longitude: gps.lon } }); } catch {}
+        continue;
+      }
       for (const mention of usernames) {
         const uname = mention.startsWith('@') ? mention : `@${mention}`;
         if (!stats.usernamesTouched.includes(uname)) stats.usernamesTouched.push(uname);
@@ -531,12 +641,16 @@ const processCategory = async (
             await strapi.entityService.update('api::article.article', article.id, { data: { publishedAt: new Date().toISOString() } });
           }
         } catch {}
-        // Try to connect uploaded file to an optional 'media' field if it exists; ignore if it doesn't
+  // Try to connect uploaded file to an optional 'media' field if it exists; ignore if it doesn't
         try {
           await strapi.entityService.update('api::article.article', article.id, { data: { media: { connect: [createdFile.id] } } });
           if (article?.id) { touchedArticleIds.add(article.id); stats.articlesUpdated += 1; }
           if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Mise à jour de l’article ${uname}`);
         } catch {}
+  // Append alt text from this image to article description (newline separated, no duplicates)
+  try { await appendAltToDescription(strapi, article.id, (createdFile as any)?.alternativeText || (createdFile as any)?.caption); } catch {}
+  // Maintain media ordering chronologically (ensure new media is placed before later media)
+  await sortArticleMediaByDate(strapi, article.id);
         // Ensure cover is set if not already; for videos, generate a thumbnail and set as cover
         try {
           if (!article?.cover && createdFile?.id) {
@@ -565,11 +679,15 @@ const processCategory = async (
             if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0, `Mise à jour de l’article ${uname}`);
           }
         } catch {}
-        // Update visit dates: preserve first_visit, refresh last_visit
+        // Update visit dates: preserve first_visit, refresh last_visit; and write GPS if provided
         try {
           const current = await strapi.entityService.findOne('api::article.article', article.id, { fields: ['first_visit','last_visit'] });
           const patch: any = { last_visit: visitDate.toISOString() };
           if (!current?.first_visit) patch.first_visit = visitDate.toISOString();
+          if (gps && (!article.latitude || !article.longitude)) {
+            patch.latitude = gps.lat;
+            patch.longitude = gps.lon;
+          }
           await strapi.entityService.update('api::article.article', article.id, { data: patch });
         } catch {}
       }

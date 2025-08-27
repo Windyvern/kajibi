@@ -1,11 +1,13 @@
 
 import { useEffect, useRef } from 'react';
-import L from 'leaflet';
+import type * as Leaflet from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import 'leaflet.markercluster';
+const L = (window as any).L as typeof Leaflet;
 import { Story } from '@/types/story';
+
+// Plugins are loaded via script tags in index.html; no dynamic loader here
 
 // Cache fetched SVGs by URL to avoid repeated network requests
 const svgCache: Map<string, string> = new globalThis.Map<string, string>();
@@ -83,48 +85,131 @@ L.Icon.Default.mergeOptions({
 
 interface MapProps {
   stories: Story[];
-  onStorySelect: (story: Story) => void;
+  onStorySelect: (story: Story, meta?: { source?: 'marker' | 'cluster' | 'external' | string }) => void;
   selectedStoryId?: string;
   center?: { lat: number; lng: number };
   zoom?: number;
   onViewChange?: (center: { lat: number; lng: number }, zoom: number) => void;
+  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }) => void;
   fitBounds?: [[number, number], [number, number]];
   fitPadding?: number;
+  suppressZoomOnMarkerClick?: boolean;
+  clusterAnimate?: boolean;
+  // Progressive cluster build (Leaflet.markercluster: chunkedLoading). Intentionally off by default.
+  // When true, markers are added in chunks to keep the UI responsive
+  // during large adds/rebuilds. Counts/bounds settle as chunks finish.
+  chunkedLoading?: boolean;
+  centerOffsetPixels?: { x: number; y: number };
+  clusterRadiusByZoom?: (zoom: number) => number;
+  offsetExternalCenter?: boolean;
 }
 
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, fitBounds, fitPadding = 60 }: MapProps) => {
+// Assets (avatar + instagram icon)
+// Use bundler-imported assets to ensure availability
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
+  // Track last stories signature to avoid unnecessary marker rebuilds
+  const lastStoriesSigRef = useRef<string | null>(null);
+  // Keep latest onStorySelect without retriggering marker rebuilds
+  const onStorySelectRef = useRef(onStorySelect);
+  useEffect(() => { onStorySelectRef.current = onStorySelect; }, [onStorySelect]);
   const lastFitKeyRef = useRef<string | null>(null);
+  // Render zone padding per spec: +64 left/right, +200 bottom (top = 0)
+  const renderPad = useRef<{ left: number; right: number; bottom: number; top: number }>({ left: 64, right: 64, bottom: 200, top: 0 });
+  const defaultCenterOffset = useRef<{ x: number; y: number }>({ x: 0, y: -95 }); // center on visual middle of 190px marker
+  const lastZoomRef = useRef<number | null>(null);
+  const lastFocusedRef = useRef<{ lat: number; lng: number } | null>(null);
+  // Lazy imports for assets (vite resolves at build time)
+  let avatarUrl: string | undefined;
+  let igUrl: string | undefined;
+  try { avatarUrl = new URL('../../../../ForCodex/117545.png', import.meta.url).toString(); } catch {}
+  try { igUrl = new URL('../../../../ForCodex/instagram.svg', import.meta.url).toString(); } catch {}
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
-    // Initialize map
-    const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
-    const initZoom: number = typeof zoom === 'number' ? zoom : 4;
-    mapInstanceRef.current = L.map(mapRef.current, { zoomControl: false }).setView(initCenter, initZoom);
+      // Initialize map
+      const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
+      const initZoom: number = typeof zoom === 'number' ? zoom : 4;
+      mapInstanceRef.current = L.map(mapRef.current, {
+        zoomControl: false,
+        zoomAnimation: true,
+        markerZoomAnimation: true,
+        fadeAnimation: true,
+      // Use discrete zoom levels for snappier wheel zoom on desktop
+      zoomSnap: 1,
+        // Make mouse wheel zoom more responsive/faster
+        wheelPxPerZoomLevel: 35,
+        wheelDebounceTime: 10,
+        // Keep the default step for +/- controls
+        zoomDelta: 1,
+        // Avoid conflicts with double-click default on touch devices
+        doubleClickZoom: false,
+        touchZoom: true,
+        // @ts-ignore ensure tap handler enabled when available
+        tap: true,
+        // Use DoubleTapDragZoom plugin with Google Maps-like behavior
+        // @ts-ignore plugin option
+        doubleTapDragZoom: 'center',
+        // @ts-ignore plugin option
+        doubleTapDragZoomOptions: { reverse: true },
+      }).setView(initCenter, initZoom);
 
     // Add tile layer (Carto light style to match legacy design)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap, &copy; CARTO',
-      subdomains: 'abcd'
+      subdomains: 'abcd',
+      updateWhenZooming: false,
+      updateWhenIdle: true,
+      keepBuffer: 2,
     }).addTo(mapInstanceRef.current);
 
     // Initialize marker cluster group
+    const useNativeClick = nativeClusterClick || (typeof window !== 'undefined' && window.innerWidth < 768);
     markersRef.current = L.markerClusterGroup({
-      maxClusterRadius: 80,
+      // Larger cluster radius at low/mid zoom; smaller at neighborhood/street level
+      maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function'
+        ? clusterRadiusByZoom(z)
+        : (z < 6 ? 120 : z < 12 ? 90 : 50)),
+      zoomToBoundsOnClick: useNativeClick,
+      spiderfyOnEveryClick: useNativeClick,
+      // Keep markers rendered even when slightly offscreen to avoid despawn
+      removeOutsideVisibleBounds: false,
+      // Enable animated expand/collapse during zoom (controlled by prop)
+      animate: clusterAnimate,
+      // Enable animation when adding markers (helps smoothness)
+      animateAddingMarkers: false,
+      // @ts-ignore Provided by leaflet.markercluster
+      chunkedLoading: !!chunkedLoading,
+      // Do not draw coverage polygon on hover/click
+      showCoverageOnHover: false,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         const childMarkers = cluster.getAllChildMarkers();
-        const first = childMarkers[0] as any;
-        const thumbnailUrl = first?.thumbnailUrl || null;
+        // Choose a stable thumbnail across rapid re-creations to avoid flicker:
+        // pick the lexicographically smallest thumbnail URL among children.
+        let thumbnailUrl: string | null = null;
+        let closed = false;
+        try {
+          const urls = (childMarkers as any[])
+            .map(m => ({ url: m?.thumbnailUrl as string | undefined, closed: Boolean(m?.isClosed) }))
+            .filter(x => typeof x.url === 'string') as Array<{ url: string; closed: boolean }>;
+          if (urls.length) {
+            urls.sort((a, b) => a.url.localeCompare(b.url));
+            thumbnailUrl = urls[0].url;
+            closed = urls[0].closed;
+          }
+        } catch {}
+        const scale = count > 10 ? (1 + 0.18 * Math.log10(1 + (count - 10) / 10)) : 1;
         return L.divIcon({
           html: `
-            <div class="marker-container">
+            <div class="marker-container" style="transform: scale(${scale.toFixed(3)})">
               <div class="marker-frame">
-                ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" />` : ''}
+    ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" ${closed ? 'style=\"filter:grayscale(100%)\"' : ''} />` : ''}
               </div>
               <span class="arrow"></span>
             </div>
@@ -137,17 +222,75 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       }
     });
 
-    mapInstanceRef.current.addLayer(markersRef.current);
+  mapInstanceRef.current.addLayer(markersRef.current);
+
+    // Apply custom padding when clicking clusters (override default focus)
+    if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
+      try {
+        const b = a.layer.getBounds();
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        // Base margins for search/header: 50px L/R, 100px T/B
+        const extraLR = 50, extraTB = 100;
+        // Account for visual marker size: half-width L/R, full height top, quarter height bottom
+        const markerW = 96, markerH = 190;
+        const padLeft = renderPad.current.left + Math.round(markerW / 2) + extraLR;
+        const padRight = renderPad.current.right + Math.round(markerW / 2) + extraLR;
+        const padTop = renderPad.current.top + markerH + extraTB;
+        const padBottom = renderPad.current.bottom + Math.round(markerH / 4) + extraTB;
+        const padTopLeft = L.point(padLeft, padTop);
+        const padBottomRight = L.point(padRight, padBottom);
+        // Compute a target zoom that shows all child markers, backing off one level for full visibility
+        const approxPad = L.point(Math.max(padLeft, padRight), Math.max(padTop, padBottom));
+        const currZ = map.getZoom();
+        const baseZ = map.getBoundsZoom(b, false, approxPad);
+        let targetZ = Math.max(currZ + 1, Math.min(19, baseZ - 1));
+        if (targetZ <= currZ) {
+          // If we can't increase zoom, spiderfy overlapping items for better UX
+          try { a.layer.spiderfy(); } catch {}
+          map.setView(b.getCenter(), Math.min(19, currZ + 1), { animate: true });
+        } else {
+          // Fit with asymmetric padding so the visual pins have breathing room
+          map.fitBounds(b, { paddingTopLeft: padTopLeft, paddingBottomRight: padBottomRight, animate: true, maxZoom: targetZ });
+        }
+      } catch {}
+      a.originalEvent?.preventDefault?.();
+    });
 
     // Emit view changes to parent (e.g., to persist center/zoom across remounts)
-    if (onViewChange) {
+    {
       const emit = () => {
         const c = mapInstanceRef.current!.getCenter();
         const z = mapInstanceRef.current!.getZoom();
-        onViewChange({ lat: c.lat, lng: c.lng }, z);
+        const b = mapInstanceRef.current!.getBounds();
+        // Persist last view for cross-page features (gallery prioritization, initial view restore)
+        try {
+          sessionStorage.setItem('view:map:center', JSON.stringify({ lat: c.lat, lng: c.lng }));
+          sessionStorage.setItem('view:map:zoom', String(z));
+          sessionStorage.setItem('view:map:bounds', JSON.stringify({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() }));
+        } catch {}
+        if (onViewChange) onViewChange({ lat: c.lat, lng: c.lng }, z);
+        if (onBoundsChange) {
+          onBoundsChange({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() });
+        }
       };
       mapInstanceRef.current.on('moveend', emit);
     }
+
+    // Zoom direction classes for subtle deploy/collapse animation
+    mapInstanceRef.current.on('zoomstart', () => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      const nextZoom = map.getZoom();
+      const prev = lastZoomRef.current;
+      lastZoomRef.current = nextZoom;
+      const el = mapRef.current;
+      if (!el || prev == null) return;
+      const zoomingIn = nextZoom > prev;
+      el.classList.remove('zoom-in', 'zoom-out');
+      el.classList.add(zoomingIn ? 'zoom-in' : 'zoom-out');
+      setTimeout(() => el.classList.remove('zoom-in', 'zoom-out'), 300);
+    });
 
     // Add custom CSS styles to document head
     const styleEl = document.createElement('style');
@@ -172,6 +315,30 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         background: transparent;
         border: none;
         filter: drop-shadow(0 6px 10px rgba(0,0,0,0.25));
+      }
+      .marker-frame .play-badge {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .marker-frame .play-badge::before {
+        content: '';
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.9);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      }
+      .marker-frame .play-badge .triangle {
+        position: absolute;
+        margin-left: 3px;
+        width: 0; height: 0;
+        border-top: 9px solid transparent;
+        border-bottom: 9px solid transparent;
+        border-left: 14px solid #111;
       }
       .marker-container .prize-badge .icon {
         width: 40px;
@@ -252,27 +419,24 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       .cluster-counter {
         position: absolute;
         top: 8px;
-        right: -12px;
+        right: 0;
+        transform: translateX(50%);
         background-color: red;
         color: white;
         font-family: 'Inter', sans-serif;
         font-size: 12px;
         font-weight: 700;
-        height: 28px;
-        min-width: 28px;
+        height: 18px;
         padding: 0 8px;
-        border-radius: 14px;
-        display: flex;
+        border-radius: 9999px;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         line-height: 1;
         box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
       }
       .cluster-counter.cluster-small {
-        width: 28px;
-        min-width: 28px;
-        padding: 0;
-        border-radius: 50%;
+        min-width: 24px;
       }
       .custom-cluster-icon {
         background: transparent !important;
@@ -282,6 +446,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         background: transparent !important;
         border: none !important;
       }
+  /* Subtle deploy/collapse for individual story markers only */
+  .zoom-in .custom-story-marker .marker-container { transform: scale(0.92); opacity: 0.8; }
+  .zoom-in .custom-story-marker .marker-container, .zoom-out .custom-story-marker .marker-container { transition: transform 220ms ease, opacity 220ms ease; }
+  .zoom-out .custom-story-marker .marker-container { transform: scale(1.06); opacity: 0.8; }
+  /* Disable extra transforms on cluster icons to avoid flicker */
+  .custom-cluster-icon { will-change: transform; backface-visibility: hidden; }
+  .custom-cluster-icon img { display:block; width:96px; height:170px; backface-visibility:hidden; transform: translateZ(0); }
     `;
     document.head.appendChild(styleEl);
 
@@ -290,15 +461,118 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
-      // Clean up styles
-      if (styleEl.parentNode) {
+      if (styleEl && styleEl.parentNode) {
         styleEl.parentNode.removeChild(styleEl);
       }
     };
   }, []);
 
+  // DoubleTapDragZoom plugin handles one-finger double-tap and drag zoom; custom handler removed
+
+  // Recreate cluster group when clusterAnimate toggles
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    // Keep base map zoom animation constant; only reconfigure cluster animations
+    if (markersRef.current) {
+      try { map.removeLayer(markersRef.current); } catch {}
+    }
+    const useNativeClick = nativeClusterClick || (typeof window !== 'undefined' && window.innerWidth < 768);
+    markersRef.current = L.markerClusterGroup({
+      maxClusterRadius: (z: number) => (typeof clusterRadiusByZoom === 'function'
+        ? clusterRadiusByZoom(z)
+        : (z < 6 ? 120 : z < 12 ? 90 : 50)),
+      zoomToBoundsOnClick: useNativeClick,
+      spiderfyOnEveryClick: useNativeClick,
+      removeOutsideVisibleBounds: false,
+      animate: clusterAnimate,
+      animateAddingMarkers: false,
+      // @ts-ignore Provided by leaflet.markercluster
+      chunkedLoading: !!chunkedLoading,
+      showCoverageOnHover: false,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        const childMarkers = cluster.getAllChildMarkers();
+        // Choose a stable thumbnail across rapid re-creations to avoid flicker
+        let thumbnailUrl: string | null = null;
+        let closed = false;
+        try {
+          const urls = (childMarkers as any[])
+            .map(m => ({ url: m?.thumbnailUrl as string | undefined, closed: Boolean(m?.isClosed) }))
+            .filter(x => typeof x.url === 'string') as Array<{ url: string; closed: boolean }>;
+          if (urls.length) {
+            urls.sort((a, b) => a.url.localeCompare(b.url));
+            thumbnailUrl = urls[0].url;
+            closed = urls[0].closed;
+          }
+        } catch {}
+        const scale = count > 10 ? (1 + 0.18 * Math.log10(1 + (count - 10) / 10)) : 1;
+        return L.divIcon({
+          html: `
+            <div class="marker-container" style="transform: scale(${scale.toFixed(3)})">
+              <div class="marker-frame">
+                ${thumbnailUrl ? `<img src="${thumbnailUrl}" alt="Cluster" ${closed ? 'style="filter:grayscale(100%)"' : ''} />` : ''}
+              </div>
+              <span class="arrow"></span>
+            </div>
+            <div class="cluster-counter ${count < 10 ? 'cluster-small' : ''}">${count}</div>
+          `,
+          className: 'custom-cluster-icon',
+          iconSize: L.point(96, 190),
+          iconAnchor: [48, 190]
+        });
+      }
+    });
+    map.addLayer(markersRef.current);
+    // Force marker rebuild after group recreation (bypass signature short-circuit)
+    try { lastStoriesSigRef.current = null; } catch {}
+    // Rebind cluster click with custom padding after recreation
+    if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
+      try {
+        const b = a.layer.getBounds();
+        const extraLR = 50, extraTB = 100;
+        const markerW = 96, markerH = 190;
+        const padLeft = renderPad.current.left + Math.round(markerW / 2) + extraLR;
+        const padRight = renderPad.current.right + Math.round(markerW / 2) + extraLR;
+        const padTop = renderPad.current.top + markerH + extraTB;
+        const padBottom = renderPad.current.bottom + Math.round(markerH / 4) + extraTB;
+        const padTopLeft = L.point(padLeft, padTop);
+        const padBottomRight = L.point(padRight, padBottom);
+        const approxPad = L.point(Math.max(padLeft, padRight), Math.max(padTop, padBottom));
+        const currZ = map.getZoom();
+        const baseZ = map.getBoundsZoom(b, false, approxPad);
+        let targetZ = Math.max(currZ + 1, Math.min(19, baseZ - 1));
+        if (targetZ <= currZ) {
+          try { a.layer.spiderfy(); } catch {}
+          map.setView(b.getCenter(), Math.min(19, currZ + 1), { animate: true });
+        } else {
+          map.fitBounds(b, { paddingTopLeft: padTopLeft, paddingBottomRight: padBottomRight, animate: true, maxZoom: targetZ });
+        }
+      } catch {}
+      a.originalEvent?.preventDefault?.();
+    });
+    // Force markers to re-add
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clusterAnimate, clusterRadiusByZoom]);
+
   useEffect(() => {
     if (!mapInstanceRef.current || !markersRef.current) return;
+
+    // Build a stable signature of the stories list (id + coords + thumbnail used for marker)
+    const sig = (() => {
+      try {
+        return (stories || [])
+          .map((s) => `${s.id}:${s.geo ? `${s.geo.lat.toFixed(6)},${s.geo.lng.toFixed(6)}` : 'n'}`)
+          .join('|');
+      } catch {
+        return String((stories || []).length);
+      }
+    })();
+    if (lastStoriesSigRef.current === sig) {
+      // No meaningful change; keep existing markers to prevent flicker
+      return;
+    }
+    lastStoriesSigRef.current = sig;
 
     // Clear existing markers
     markersRef.current.clearLayers();
@@ -309,6 +583,8 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
       // Prefer provided story.thumbnail (guaranteed image), else first image panel
       const firstImagePanel = story.panels.find(p => p.type === 'image');
+      const firstVideoPanel = story.panels.find(p => p.type === 'video');
+      const videoUrl = firstVideoPanel?.media || (story.thumbnail && /\.(mp4|mov|webm)$/i.test(story.thumbnail) ? story.thumbnail : undefined);
       const thumbnailUrl = story.thumbnail || firstImagePanel?.media || null;
 
       const isSelected = story.id === selectedStoryId;
@@ -327,13 +603,15 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         }
       }
 
+      const isVideoThumb = story.panels.find(p => p.type === 'video') ? true : (/\.(mp4|mov|webm)$/i.test(story.thumbnail || '') ? true : false);
+      const playBadge = isVideoThumb ? `<div class=\"play-badge\"><div class=\"triangle\"></div></div>` : '';
       const markerIcon = L.divIcon({
         html: `
           <div class="marker-container">
             ${prizeHtml}
             <div class="marker-frame ${isSelected ? 'selected' : ''}" data-story-id="${story.id}">
               ${thumbnailUrl 
-                ? `<img src="${thumbnailUrl}" alt="${story.title}" />` 
+                ? `<img src="${thumbnailUrl}" alt="${story.title}" ${story.isClosed ? 'style=\"filter: grayscale(100%);\"' : ''} />` 
                 : `<div class="marker-placeholder">${story.title[0]}</div>`
               }
             </div>
@@ -345,22 +623,49 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         iconAnchor: [48, 190]
       });
 
-      const marker = L.marker([story.geo.lat, story.geo.lng], { icon: markerIcon });
+  const marker = L.marker([story.geo.lat, story.geo.lng], { icon: markerIcon, zIndexOffset: isSelected ? 1000 : 0 });
       
       // Store thumbnail URL for cluster use
-      (marker as any).thumbnailUrl = thumbnailUrl;
+  (marker as any).thumbnailUrl = thumbnailUrl;
+  (marker as any).isClosed = story.isClosed;
       
       marker.on('click', () => {
-        // Center and zoom to street level before opening the story
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setView([story.geo!.lat, story.geo!.lng], 16, { animate: true });
-          if (onViewChange) {
-            onViewChange({ lat: story.geo!.lat, lng: story.geo!.lng }, 16);
+        if (!suppressZoomOnMarkerClick) {
+          // Center and zoom to street level before opening the story
+          if (mapInstanceRef.current) {
+            if (centerOffsetPixels) {
+              const map = mapInstanceRef.current;
+              const z = 16;
+              const pt = map.project([story.geo!.lat, story.geo!.lng], z);
+              const target = L.point(pt.x + (centerOffsetPixels.x || 0), pt.y + (centerOffsetPixels.y || 0));
+              const latlng = map.unproject(target, z);
+      map.setView(latlng, z, { animate: true });
+            } else {
+      // Offset center to visual middle of marker and apply padding to avoid cut-offs
+      const map = mapInstanceRef.current;
+      const z = 16;
+      const pt = map.project([story.geo!.lat, story.geo!.lng], z);
+      const target = L.point(pt.x + defaultCenterOffset.current.x, pt.y + defaultCenterOffset.current.y);
+      const latlng = map.unproject(target, z);
+      map.setView(latlng, z, { animate: true });
+      try {
+        const paddingTopLeft = L.point(renderPad.current.left, renderPad.current.top);
+        const paddingBottomRight = L.point(renderPad.current.right, renderPad.current.bottom);
+        (map as any).panInside?.([story.geo!.lat, story.geo!.lng], { paddingTopLeft, paddingBottomRight });
+      } catch {}
+            }
+            if (onViewChange) {
+              onViewChange({ lat: story.geo!.lat, lng: story.geo!.lng }, 16);
+            }
           }
         }
-        onStorySelect(story);
+        try { onStorySelectRef.current?.(story, { source: 'marker' }); } catch {}
       });
 
+      // Remember target so we can re-center after layout changes
+      marker.on('click', () => { lastFocusedRef.current = { lat: story.geo!.lat, lng: story.geo!.lng }; });
+
+      if (isSelected) { try { marker.setZIndexOffset(10000); } catch {} }
       markersRef.current.addLayer(marker);
 
       // If prize is an SVG and not cached yet, fetch and inline it to get true stroke + shadow
@@ -387,7 +692,11 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
           .catch(() => {});
       }
     });
-  }, [stories, onStorySelect, selectedStoryId]);
+
+    // After adding markers, refresh clusters and ensure layout is valid
+    try { (markersRef.current as any).refreshClusters?.(); } catch {}
+    try { mapInstanceRef.current.invalidateSize(); } catch {}
+  }, [stories, clusterAnimate]);
 
   // Apply external center/zoom changes without creating feedback loops
   useEffect(() => {
@@ -407,9 +716,22 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     const EPS = 1e-4; // ~11m threshold
     const needsMove = latDiff > EPS || lngDiff > EPS || zoomDiff >= 1;
     if (needsMove) {
-      map.setView([nextLat, nextLng], nextZoom, { animate: false });
+      const shouldOffset = Boolean((centerOffsetPixels || defaultCenterOffset.current) && (offsetExternalCenter || selectedStoryId || lastFocusedRef.current));
+      if (shouldOffset && typeof nextLat === 'number' && typeof nextLng === 'number') {
+        try {
+          const pt = map.project([nextLat, nextLng], nextZoom);
+          const off = centerOffsetPixels || defaultCenterOffset.current;
+          const target = L.point(pt.x + (off.x || 0), pt.y + (off.y || 0));
+          const latlng = map.unproject(target, nextZoom);
+          map.setView(latlng, nextZoom, { animate: false });
+        } catch {
+          map.setView([nextLat, nextLng], nextZoom, { animate: false });
+        }
+      } else {
+        map.setView([nextLat, nextLng], nextZoom, { animate: false });
+      }
     }
-  }, [center?.lat, center?.lng, zoom]);
+  }, [center?.lat, center?.lng, zoom, offsetExternalCenter]);
 
   // Apply fitBounds when prop changes (once per unique bounds)
   useEffect(() => {
@@ -419,7 +741,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     if (lastFitKeyRef.current === key) return;
     try {
       const b = L.latLngBounds([L.latLng(fitBounds[0][0], fitBounds[0][1]), L.latLng(fitBounds[1][0], fitBounds[1][1])]);
-      map.fitBounds(b, { padding: [fitPadding, fitPadding], animate: false });
+  // Expand bounds visually by render padding + UI margins
+  const extraLR = 50, extraTB = 100;
+  const padLeft = fitPadding + renderPad.current.left + extraLR;
+  const padRight = fitPadding + renderPad.current.right + extraLR;
+  const padTop = fitPadding + renderPad.current.top + extraTB;
+  const padBottom = fitPadding + renderPad.current.bottom + extraTB;
+  map.fitBounds(b, { paddingTopLeft: L.point(padLeft, padTop), paddingBottomRight: L.point(padRight, padBottom), animate: false, maxZoom: 16 });
       lastFitKeyRef.current = key;
     } catch {}
   }, [fitBounds, fitPadding]);
@@ -439,6 +767,18 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => {
         map.invalidateSize();
+        // After size change, ensure last focused marker remains well positioned
+        try {
+          const target = lastFocusedRef.current;
+          if (target) {
+            const z = map.getZoom();
+            const pt = map.project([target.lat, target.lng], z);
+            const off = centerOffsetPixels || defaultCenterOffset.current;
+            const dest = L.point(pt.x + (off.x || 0), pt.y + (off.y || 0));
+            const latlng = map.unproject(dest, z);
+            map.setView(latlng, z, { animate: false });
+          }
+        } catch {}
       });
       ro.observe(el);
     }
@@ -457,6 +797,29 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full" />
+      {/* Bottom-left logo + Instagram (both link to Instagram) */}
+      <div className="pointer-events-auto absolute left-4 bottom-4 flex items-center gap-3 z-[11000]">
+        <a
+          href="https://instagram.com/alex_kajiru"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 h-12 w-12 rounded-full bg-white/90 border shadow-md flex items-center justify-center overflow-hidden"
+          aria-label="Logo"
+        >
+          <img src="/favicon.ico" alt="Logo" className="h-10 w-10 object-contain" />
+        </a>
+        <a
+          href="https://instagram.com/alex_kajiru"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 h-12 w-12 rounded-full bg-white/90 border shadow-md flex items-center justify-center"
+          aria-label="Instagram"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#dead4b" role="img" aria-hidden="true">
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+          </svg>
+        </a>
+      </div>
     </div>
   );
 };

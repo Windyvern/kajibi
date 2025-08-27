@@ -27,6 +27,19 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
     if (val) next.set('q', val); else next.delete('q');
     setParams(next, { replace: true });
   };
+  const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === 'Enter') {
+      const next = new URLSearchParams(params);
+      next.set('fit', '1');
+      setParams(next, { replace: true });
+      // Remove the flag shortly after to avoid lingering
+      setTimeout(() => {
+        const clear = new URLSearchParams(next);
+        clear.delete('fit');
+        setParams(clear, { replace: true });
+      }, 100);
+    }
+  };
 
   return (
     <div className={className || ''}>
@@ -34,6 +47,7 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
         <input
           value={q}
           onChange={onChange}
+          onKeyDown={onKeyDown}
           placeholder={"Nom du lieu, ville, plat, @instagram..."}
           className="w-full h-12 rounded-full border bg-white/90 backdrop-blur px-5 text-sm shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -46,22 +60,24 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
         </button>
       </div>
       {showFilters && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {[
-            { k: 't', label: 'Titre' },
-            { k: 'u', label: 'Username' },
-            { k: 'a', label: 'Adresse' },
-            { k: 'd', label: 'Description' },
-            { k: 'i', label: 'Images' },
-          ].map(({k,label}) => (
-            <button
-              key={k}
-              onClick={() => setField(k, !has(k))}
-              className={`px-3 py-1 rounded-full text-xs ${has(k) ? 'bg-blue-600 text-white' : 'bg-white/80 border'}`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="mt-2 flex justify-center">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { k: 't', label: 'Nom' },
+              { k: 'u', label: '@Instagram' },
+              { k: 'a', label: 'Adresse' },
+              { k: 'd', label: 'Mots-clés' },
+              { k: 'i', label: 'Contenu' },
+            ].map(({k,label}) => (
+              <button
+                key={k}
+                onClick={() => setField(k, !has(k))}
+                className={`px-3 py-1 rounded-full text-xs transition ${has(k) ? 'bg-blue-600 text-white' : 'bg-white/80 text-gray-600 border'}`}
+              >
+                {has(k) ? `✔︎ ${label}` : label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

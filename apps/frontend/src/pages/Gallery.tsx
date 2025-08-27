@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
+import { Map } from '@/components/Map';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { useStories } from '@/hooks/useStories';
 import { Story } from '@/types/story';
@@ -8,18 +9,59 @@ import { Button } from '@/components/ui/button';
 import { List as ListIcon } from 'lucide-react';
 import { ViewToggle } from '@/components/ViewToggle';
 import { SearchBar } from '@/components/SearchBar';
+import { SearchHeader } from '@/components/SearchHeader';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
+import OptionsPopover from '@/components/OptionsPopover';
+import { useOptions } from '@/context/OptionsContext';
 
 const GalleryPage = () => {
   const { data: stories, isLoading, error } = useStories();
   const [selected, setSelected] = useState<Story | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { showClosed, galleryMap, clusterAnim } = useOptions();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
   const listParam = params.get('list');
   const prizeParam = params.get('prize');
   const q = params.get('q');
+  const isMap = params.get('style') === 'map';
+  const selectedSlug = params.get('story');
+  const selectedPanel = params.get('panel') || undefined;
+  const selectedStory = selectedSlug ? (stories || []).find(s => (s.handle || s.id).toLowerCase() === selectedSlug.toLowerCase()) || null : null;
+  // Parse mv/+persist regardless of mode to keep hooks order stable
+  const parseMv = () => {
+    try {
+      const mv = params.get('mv');
+      if (!mv) return null;
+      const [latS, lngS, zS] = mv.split(',');
+      const lat = parseFloat(latS); const lng = parseFloat(lngS); const z = parseInt(zS, 10);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(z)) return { center: { lat, lng }, zoom: z } as const;
+    } catch {}
+    return null;
+  };
+  const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>(() => parseMv() || { center: { lat: 41.5, lng: 70 }, zoom: 3 });
+  // Debounced mv writer to avoid spamming navigate during wheel zoom in map-in-gallery mode
+  const mvTimerRef = useRef<number | null>(null);
+  const prevMvRef = useRef<string | null>(null);
+  const writeMv = (center: { lat: number; lng: number }, zoom: number) => {
+    try {
+      const nextMv = `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`;
+      if (prevMvRef.current === nextMv) return;
+      if (mvTimerRef.current) window.clearTimeout(mvTimerRef.current);
+      mvTimerRef.current = window.setTimeout(() => {
+        try {
+          const latest = new URL(window.location.href);
+          const params = latest.searchParams;
+          params.set('mv', nextMv);
+          window.history.replaceState({}, '', `${latest.pathname}?${params.toString()}`);
+          prevMvRef.current = nextMv;
+        } catch {}
+      }, 200);
+    } catch {}
+  };
+
+  useEffect(() => () => { if (mvTimerRef.current) window.clearTimeout(mvTimerRef.current); }, []);
   // Restore scroll if returning from a story in gallery context
   const locKey = `${location.pathname}${location.search}`;
   useEffect(() => {
@@ -33,6 +75,20 @@ const GalleryPage = () => {
       }
     } catch {}
   }, [locKey]);
+
+  // Restore scroll when returning from map view toggle
+  useEffect(() => {
+    try {
+      const k = `scroll:/stories`;
+      const v = sessionStorage.getItem(k);
+      if (v) {
+        window.requestAnimationFrame(() => {
+          window.scrollTo(0, parseInt(v, 10) || 0);
+          sessionStorage.removeItem(k);
+        });
+      }
+    } catch {}
+  }, []);
 
   if (isLoading) {
     return (
@@ -75,7 +131,47 @@ const GalleryPage = () => {
     images: sf.includes('i'),
   } as const;
   const { filtered, matchedPanelByStory, scores } = useSearchFilter(baseStories, q, fields);
-  const displayedStories = q ? filtered : baseStories;
+  let displayedStories = q ? filtered : baseStories;
+  if (!showClosed) displayedStories = displayedStories.filter(s => !s.isClosed);
+
+  // Read last map zoom to decide default vs focused view
+  let lastZoom: number | null = null;
+  try {
+    const zRaw = sessionStorage.getItem('view:map:zoom');
+    if (zRaw) lastZoom = parseInt(zRaw, 10);
+  } catch {}
+
+  // Build optional sections: visible on map first (only for zoom >= 6), then recent stories
+  let sections: Array<{ title: string; stories: Story[] }> | undefined;
+  try {
+    const bRaw = sessionStorage.getItem('view:map:bounds');
+    if (bRaw) {
+      const b = JSON.parse(bRaw) as { north: number; south: number; east: number; west: number };
+      const inBounds: Story[] = [];
+      const outBounds: Story[] = [];
+      for (const s of displayedStories) {
+        const g = s.geo;
+        if (g && g.lat <= b.north && g.lat >= b.south && g.lng <= b.east && g.lng >= b.west) inBounds.push(s); else outBounds.push(s);
+      }
+      const showInBounds = (lastZoom != null) && (lastZoom >= 6);
+      if (showInBounds && inBounds.length > 0) {
+        const outSorted = [...outBounds].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+        sections = [
+          { title: 'Adresses visibles sur la carte', stories: inBounds },
+          { title: 'Stories récentes', stories: outSorted },
+        ];
+      } else {
+        // Default zoom: show most recent overall
+        displayedStories = [...displayedStories].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      }
+    } else {
+      // No bounds available: default to most recent
+      displayedStories = [...displayedStories].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    }
+  } catch {
+    // On error, default to most recent
+    displayedStories = [...displayedStories].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  }
 
   const listTitle = (() => {
     if (listParam) {
@@ -95,48 +191,84 @@ const GalleryPage = () => {
     return null;
   })();
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Responsive header with padding around search */}
-      <div className="px-4 md:px-6 pt-4">
-        {/* Desktop / wide screens: row with centered search and right actions */}
-        <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4">
-          <div />
-          <div className="justify-self-center w-full lg:w-[620px] xl:w-[720px]">
-            <SearchBar
-              showFilters={filtersOpen}
-              onToggleFilters={() => setFiltersOpen(o => !o)}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <ViewToggle mode="route" />
-          </div>
+  // Map view: full height map with fixed header
+  if (isMap) {
+    const selectedSlug = params.get('story');
+    const selectedPanel = params.get('panel') || undefined;
+    const selectedStory = selectedSlug ? (stories || []).find(s => (s.handle || s.id).toLowerCase() === selectedSlug.toLowerCase()) || null : null;
+    // When selected story changes in map mode, center to it
+    useEffect(() => {
+      if (selectedStory?.geo) {
+        setMapView({ center: selectedStory.geo, zoom: 16 });
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedStory?.id]);
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="fixed top-3 left-3 right-3 z-[11000]" data-lov-id="src/pages/Gallery.tsx:145:6">
+          <SearchHeader
+            dataLovId="src/pages/Gallery.tsx:145:6"
+            viewToggleMode="route"
+            showFilters={filtersOpen}
+            onToggleFilters={() => setFiltersOpen(o => !o)}
+            listsButtonVariant="outline"
+          />
         </div>
+        <div className="h-[100svh] w-full">
+          <Map
+            stories={displayedStories.filter(s => s.geo)}
+            onStorySelect={(story) => {
+              const pid = q ? matchedPanelByStory[story.id] : undefined;
+              const next = new URLSearchParams(location.search);
+              next.set('style', 'map');
+              next.set('story', (story.handle || story.id));
+              if (pid) next.set('panel', pid); else next.delete('panel');
+              const from = params.get('from');
+              if (from) next.set('from', from);
+              navigate({ pathname: location.pathname, search: `?${next.toString()}` });
+            }}
+            center={mapView.center}
+            zoom={mapView.zoom}
+            onViewChange={(c,z)=> { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
+            fitPadding={80}
+            centerOffsetPixels={{ x: 0, y: -95 }}
+            selectedStoryId={selectedStory?.id}
+            clusterAnimate={clusterAnim}
+          />
+          {selectedStory && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[12000]">
+              <div style={{ width: '56.25vh', height: '100vh' }} className="pointer-events-auto">
+                <TwoPanelStoryViewer
+                  initialStoryId={selectedStory.id}
+                  initialPanelId={selectedPanel}
+                  stories={displayedStories}
+                  onClose={() => {
+                    const next = new URLSearchParams(location.search);
+                    next.delete('story');
+                    next.delete('panel');
+                    navigate({ pathname: location.pathname, search: `?${next.toString()}` });
+                  }}
+                  hideRightPanel
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-        {/* Mobile: stacked search then actions */}
-        <div className="md:hidden flex flex-col gap-2">
-          <div className="w-full md:w-[720px] mx-auto">
-            <SearchBar
-              showFilters={filtersOpen}
-              onToggleFilters={() => setFiltersOpen(o => !o)}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Link to="/lists">
-              <Button variant="outline" className="bg-white/10 border-white/20">
-                <ListIcon size={16} className="mr-2" />
-                Listes
-              </Button>
-            </Link>
-            <ViewToggle mode="route" />
-          </div>
-        </div>
+  return (
+    <div className="min-h-screen bg-background mt-12">
+      {/* Responsive header with padding around search */}
+      <div className="fixed top-3 left-3 right-3 z-[11000]" data-lov-id="src/pages/Gallery.tsx:145:6">
+        <SearchHeader
+          dataLovId="src/pages/Gallery.tsx:145:6"
+          viewToggleMode="route"
+          showFilters={filtersOpen}
+          onToggleFilters={() => setFiltersOpen(o => !o)}
+          listsButtonVariant="outline"
+        />
       </div>
 
       {(listParam || prizeParam || q) && (
@@ -149,7 +281,7 @@ const GalleryPage = () => {
               )}
             </h2>
             <button
-              onClick={() => navigate('/gallery')}
+              onClick={() => navigate('/stories')}
               className="text-sm text-gray-600 hover:text-gray-800"
             >
               × Fermer
@@ -159,19 +291,24 @@ const GalleryPage = () => {
       )}
 
       <LatestArticlesGallery
-        stories={displayedStories}
+        stories={sections ? undefined : displayedStories}
+        sections={sections}
         onSelect={(story) => {
           const pid = q ? matchedPanelByStory[story.id] : undefined;
-          const base = `/story/${encodeURIComponent(story.handle || story.id)}`;
           const current = `${location.pathname}${location.search}`;
-          // Save scroll position for gallery return
           try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}
-          const from = `from=${encodeURIComponent(current)}`;
-          navigate(
-            pid
-              ? `${base}?${from}&panel=${encodeURIComponent(pid)}`
-              : `${base}?${from}`
-          );
+          if (story.geo && galleryMap) {
+            const next = new URLSearchParams(location.search);
+            next.set('style', 'map');
+            next.set('story', (story.handle || story.id));
+            if (pid) next.set('panel', pid); else next.delete('panel');
+            next.set('from', encodeURIComponent(current));
+            navigate({ pathname: '/stories', search: `?${next.toString()}` });
+          } else {
+            const base = `/story/${encodeURIComponent(story.handle || story.id)}`;
+            const from = `from=${encodeURIComponent(current)}`;
+            navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
+          }
         }}
       />
 

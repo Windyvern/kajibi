@@ -9,6 +9,7 @@
   "options": {
     "draftAndPublish": true
   },
+  "pluginOptions": {},
   "attributes": {
     "name": {
       "type": "string",
@@ -22,6 +23,18 @@
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::article.article",
+      "mappedBy": "types"
+    },
+    "reels": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::reel.reel",
+      "mappedBy": "types"
+    },
+    "posts": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::post.post",
       "mappedBy": "types"
     }
   }

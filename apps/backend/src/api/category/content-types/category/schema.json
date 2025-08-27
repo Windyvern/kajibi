@@ -26,6 +26,18 @@
     },
     "description": {
       "type": "text"
+    },
+    "reels": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::reel.reel",
+      "mappedBy": "category"
+    },
+    "posts": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::post.post",
+      "mappedBy": "category"
     }
   }
 }

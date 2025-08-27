@@ -62,40 +62,30 @@
       ]
     },
     "location": {
-      "type": "json",
+      "type": "customField",
       "customField": "plugin::google-maps.location-picker"
     },
     "latitude": {
-      "type": "float",
-      "precision": 9,
-      "scale": 6
+      "type": "float"
     },
     "longitude": {
-      "type": "float",
-      "precision": 9,
-      "scale": 6
+      "type": "float"
     },
     "username": {
       "type": "string",
       "regex": "^@[A-Za-z0-9_.]+$"
     },
     "rating": {
-      "type": "decimal",
-      "precision": 3,
-      "scale": 2
+      "type": "decimal"
     },
     "address": {
       "type": "string"
     },
     "price_min": {
-      "type": "decimal",
-      "precision": 10,
-      "scale": 2
+      "type": "decimal"
     },
     "price_max": {
-      "type": "decimal",
-      "precision": 10,
-      "scale": 2
+      "type": "decimal"
     },
     "is_closed": {
       "type": "boolean",
@@ -153,6 +143,11 @@
       "relation": "manyToMany",
       "target": "api::reel.reel",
       "mappedBy": "articles"
+    },
+    "append_article": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::article.article"
     }
   }
 }

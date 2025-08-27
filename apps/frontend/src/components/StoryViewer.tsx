@@ -161,7 +161,7 @@ export const StoryViewer = () => {
       </button>
 
       {/* Story Info */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 z-20 p-6">
         <div className="text-white">
           <p className="text-sm opacity-80 mb-1">
             Story {currentStoryIndex + 1} of {sampleStories.length}

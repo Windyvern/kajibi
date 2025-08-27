@@ -1,0 +1,45 @@
+{
+  "kind": "collectionType",
+  "collectionName": "maps",
+  "info": {
+    "singularName": "map",
+    "pluralName": "maps",
+    "displayName": "Map",
+    "description": "Editable map with Geoman shapes linked to a List"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "title"
+    },
+    "description": {
+      "type": "text"
+    },
+    "list": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::list.list",
+      "inversedBy": "maps"
+    },
+    "center_lat": {
+      "type": "float"
+    },
+    "center_lng": {
+      "type": "float"
+    },
+    "zoom": {
+      "type": "integer"
+    },
+    "shapes": {
+      "type": "json"
+    }
+  }
+}

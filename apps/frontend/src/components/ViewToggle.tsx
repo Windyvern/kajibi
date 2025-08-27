@@ -1,22 +1,43 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Map as MapIcon, Grid3X3 } from 'lucide-react';
 
-export function ViewToggle({ mode = 'route' }: { mode?: 'route' | 'query' }) {
+export function ViewToggle({ mode = 'route', showLabels = true, routeBase = '/stories' }: { mode?: 'route' | 'query'; showLabels?: boolean; routeBase?: string }) {
   const location = useLocation();
   const navigate = useNavigate();
 
   const params = new URLSearchParams(location.search);
   const isMap = (() => {
-    if (mode === 'route') return location.pathname.startsWith('/map');
+    if (mode === 'route') return location.pathname === routeBase && params.get('style') === 'map';
     return params.get('style') === 'map';
   })();
 
   const go = (target: 'map' | 'gallery') => {
     if (mode === 'route') {
-      // Preserve query params while switching between /map and /gallery
-      const qs = params.toString();
-      const path = target === 'map' ? '/map' : '/gallery';
-      navigate(qs ? `${path}?${qs}` : path);
+      // Toggle between /stories and /stories?style=map
+      const next = new URLSearchParams(params);
+      // Save current scroll position when leaving gallery for map, so we can restore on return
+      try {
+        if (target === 'map') {
+          sessionStorage.setItem(`scroll:${routeBase}`, String(window.scrollY));
+        }
+      } catch {}
+      if (target === 'map') {
+        if (!next.get('mv')) {
+          try {
+            const cRaw = sessionStorage.getItem('view:map:center');
+            const zRaw = sessionStorage.getItem('view:map:zoom');
+            if (cRaw && zRaw) {
+              const c = JSON.parse(cRaw) as { lat: number; lng: number };
+              const z = parseInt(zRaw, 10);
+              if (c && !Number.isNaN(z)) next.set('mv', `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(z)}`);
+            }
+          } catch {}
+        }
+        next.set('style', 'map');
+      } else {
+        next.delete('style');
+      }
+      navigate({ pathname: routeBase, search: `?${next.toString()}` });
     } else {
       const next = new URLSearchParams(params);
       if (target === 'map') next.set('style', 'map'); else next.delete('style');
@@ -25,22 +46,22 @@ export function ViewToggle({ mode = 'route' }: { mode?: 'route' | 'query' }) {
   };
 
   return (
-    <div className="inline-flex items-center rounded-full bg-white shadow-md border border-black/10 overflow-hidden select-none">
+    <div className="inline-flex items-start rounded-full bg-white shadow-md border border-black/10 overflow-hidden select-none">
       <button
         className={`px-3 py-1.5 text-sm font-medium flex items-center ${isMap ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
         onClick={() => go('map')}
         aria-pressed={isMap}
       >
-        <MapIcon size={16} className="mr-1.5" />
-        <span>Carte</span>
+  <MapIcon size={16} className={showLabels ? 'mr-1.5' : ''} />
+  {showLabels && <span>Carte</span>}
       </button>
       <button
         className={`px-3 py-1.5 text-sm font-medium flex items-center ${!isMap ? 'bg-blue-600 text-white' : 'text-gray-700'}`}
         onClick={() => go('gallery')}
         aria-pressed={!isMap}
       >
-        <Grid3X3 size={16} className="mr-1.5" />
-        <span>Galerie</span>
+  <Grid3X3 size={16} className={showLabels ? 'mr-1.5' : ''} />
+  {showLabels && <span>Galerie</span>}
       </button>
     </div>
   );

@@ -9,11 +9,25 @@
   "options": {
     "draftAndPublish": true
   },
+  "pluginOptions": {},
   "attributes": {
-    "caption": { "type": "text" },
-    "taken_at": { "type": "datetime" },
-    "source": { "type": "string", "default": "instagram" },
-    "source_id": { "type": "string", "unique": true },
+    "title": {
+      "type": "string"
+    },
+    "caption": {
+      "type": "text"
+    },
+    "taken_at": {
+      "type": "datetime"
+    },
+    "source": {
+      "type": "string",
+      "default": "instagram"
+    },
+    "source_id": {
+      "type": "string",
+      "unique": true
+    },
     "author": {
       "type": "relation",
       "relation": "manyToOne",
@@ -22,13 +36,72 @@
     "media": {
       "type": "media",
       "multiple": true,
-      "allowedTypes": ["images", "videos"]
+      "allowedTypes": [
+        "images",
+        "videos"
+      ]
     },
     "articles": {
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::article.article",
       "inversedBy": "reels"
+    },
+    "slug": {
+      "type": "uid"
+    },
+    "cover": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "latitude": {
+      "type": "float"
+    },
+    "longitude": {
+      "type": "float"
+    },
+    "lists": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::list.list",
+      "mappedBy": "reels"
+    },
+    "prizes": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::prize.prize",
+      "mappedBy": "reels"
+    },
+    "tags": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::tag.tag",
+      "inversedBy": "reels"
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category.category",
+      "inversedBy": "reels"
+    },
+    "types": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::type.type",
+      "inversedBy": "reels"
+    },
+    "is_closed": {
+      "type": "boolean",
+      "default": false
+    },
+    "address": {
+      "type": "string"
     }
   }
 }

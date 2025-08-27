@@ -9,25 +9,89 @@
   "options": {
     "draftAndPublish": true
   },
+  "pluginOptions": {},
   "attributes": {
-    "caption": { "type": "text" },
-    "taken_at": { "type": "datetime" },
-    "source": { "type": "string", "default": "instagram" },
-    "source_id": { "type": "string", "unique": true },
+    "title": {
+      "type": "string"
+    },
+    "caption": {
+      "type": "text"
+    },
+    "taken_at": {
+      "type": "datetime"
+    },
+    "source": {
+      "type": "string",
+      "default": "instagram"
+    },
+    "source_id": {
+      "type": "string",
+      "unique": true
+    },
+    "media": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": [
+        "images",
+        "videos"
+      ]
+    },
     "author": {
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::author.author"
     },
-    "media": {
-      "type": "media",
-      "multiple": true,
-      "allowedTypes": ["images", "videos"]
-    },
     "articles": {
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::article.article",
+      "inversedBy": "posts"
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "caption"
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category.category",
+      "inversedBy": "posts"
+    },
+    "longitude": {
+      "type": "float"
+    },
+    "latitude": {
+      "type": "float"
+    },
+    "address": {
+      "type": "string"
+    },
+    "is_closed": {
+      "type": "boolean",
+      "default": false
+    },
+    "types": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::type.type",
+      "inversedBy": "posts"
+    },
+    "prizes": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::prize.prize",
+      "inversedBy": "posts"
+    },
+    "lists": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::list.list",
+      "mappedBy": "posts"
+    },
+    "tags": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::tag.tag",
       "inversedBy": "posts"
     }
   }

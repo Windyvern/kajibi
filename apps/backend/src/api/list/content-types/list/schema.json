@@ -9,6 +9,7 @@
   "options": {
     "draftAndPublish": true
   },
+  "pluginOptions": {},
   "attributes": {
     "name": {
       "type": "string",
@@ -36,7 +37,12 @@
       "type": "media",
       "multiple": true,
       "required": false,
-      "allowedTypes": ["images", "files", "videos", "audios"]
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
     },
     "cover": {
       "type": "media",
@@ -53,6 +59,49 @@
       "relation": "manyToMany",
       "target": "api::article.article",
       "mappedBy": "lists"
+    },
+    "list_type": {
+      "type": "enumeration",
+      "required": false,
+      "default": "articles",
+      "enum": [
+        "articles",
+        "media"
+      ]
+    },
+    "disable_map_view": {
+      "type": "boolean",
+      "default": false
+    },
+    "reels": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::reel.reel",
+      "inversedBy": "lists"
+    },
+    "posts": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::post.post",
+      "inversedBy": "lists"
+    },
+    "latitude": {
+      "type": "float",
+      "required": false
+    },
+    "longitude": {
+      "type": "float",
+      "required": false
+    },
+    "location": {
+      "type": "customField",
+      "customField": "plugin::google-maps.location-picker"
+    },
+    "maps": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::map.map",
+      "mappedBy": "list"
     }
   }
 }

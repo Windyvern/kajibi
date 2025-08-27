@@ -415,6 +415,10 @@ export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
   };
   attributes: {
     address: Schema.Attribute.String;
+    append_article: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::article.article'
+    >;
     author: Schema.Attribute.Relation<'manyToOne', 'api::author.author'>;
     avatar: Schema.Attribute.Media<'images'>;
     blocks: Schema.Attribute.DynamicZone<
@@ -521,7 +525,9 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String;
+    posts: Schema.Attribute.Relation<'oneToMany', 'api::post.post'>;
     publishedAt: Schema.Attribute.DateTime;
+    reels: Schema.Attribute.Relation<'oneToMany', 'api::reel.reel'>;
     slug: Schema.Attribute.UID;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -580,19 +586,63 @@ export interface ApiListList extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     description: Schema.Attribute.Text;
+    disable_map_view: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    latitude: Schema.Attribute.Float;
+    list_type: Schema.Attribute.Enumeration<['articles', 'media']> &
+      Schema.Attribute.DefaultTo<'articles'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::list.list'> &
       Schema.Attribute.Private;
+    location: Schema.Attribute.JSON &
+      Schema.Attribute.CustomField<'plugin::google-maps.location-picker'>;
+    longitude: Schema.Attribute.Float;
+    maps: Schema.Attribute.Relation<'oneToMany', 'api::map.map'>;
     media: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',
       true
     >;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    posts: Schema.Attribute.Relation<'manyToMany', 'api::post.post'>;
     publishedAt: Schema.Attribute.DateTime;
+    reels: Schema.Attribute.Relation<'manyToMany', 'api::reel.reel'>;
     slug: Schema.Attribute.UID<'name'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiMapMap extends Struct.CollectionTypeSchema {
+  collectionName: 'maps';
+  info: {
+    description: 'Editable map with Geoman shapes linked to a List';
+    displayName: 'Map';
+    pluralName: 'maps';
+    singularName: 'map';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    center_lat: Schema.Attribute.Float;
+    center_lng: Schema.Attribute.Float;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    list: Schema.Attribute.Relation<'manyToOne', 'api::list.list'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::map.map'> &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    shapes: Schema.Attribute.JSON;
+    slug: Schema.Attribute.UID<'title'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    zoom: Schema.Attribute.Integer;
   };
 }
 
@@ -646,20 +696,31 @@ export interface ApiPostPost extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    address: Schema.Attribute.String;
     articles: Schema.Attribute.Relation<'manyToMany', 'api::article.article'>;
     author: Schema.Attribute.Relation<'manyToOne', 'api::author.author'>;
     caption: Schema.Attribute.Text;
+    category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    is_closed: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    latitude: Schema.Attribute.Float;
+    lists: Schema.Attribute.Relation<'manyToMany', 'api::list.list'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::post.post'> &
       Schema.Attribute.Private;
+    longitude: Schema.Attribute.Float;
     media: Schema.Attribute.Media<'images' | 'videos', true>;
+    prizes: Schema.Attribute.Relation<'manyToMany', 'api::prize.prize'>;
     publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'caption'>;
     source: Schema.Attribute.String & Schema.Attribute.DefaultTo<'instagram'>;
     source_id: Schema.Attribute.String & Schema.Attribute.Unique;
+    tags: Schema.Attribute.Relation<'manyToMany', 'api::tag.tag'>;
     taken_at: Schema.Attribute.DateTime;
+    title: Schema.Attribute.String;
+    types: Schema.Attribute.Relation<'manyToMany', 'api::type.type'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -693,6 +754,7 @@ export interface ApiPrizePrize extends Struct.CollectionTypeSchema {
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::prize.prize'> &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    posts: Schema.Attribute.Relation<'manyToMany', 'api::post.post'>;
     priority: Schema.Attribute.Integer &
       Schema.Attribute.SetMinMax<
         {
@@ -702,6 +764,7 @@ export interface ApiPrizePrize extends Struct.CollectionTypeSchema {
       > &
       Schema.Attribute.DefaultTo<100>;
     publishedAt: Schema.Attribute.DateTime;
+    reels: Schema.Attribute.Relation<'manyToMany', 'api::reel.reel'>;
     slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
     text_color: Schema.Attribute.String &
       Schema.Attribute.CustomField<
@@ -729,20 +792,32 @@ export interface ApiReelReel extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    address: Schema.Attribute.String;
     articles: Schema.Attribute.Relation<'manyToMany', 'api::article.article'>;
     author: Schema.Attribute.Relation<'manyToOne', 'api::author.author'>;
     caption: Schema.Attribute.Text;
+    category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
+    cover: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    is_closed: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    latitude: Schema.Attribute.Float;
+    lists: Schema.Attribute.Relation<'manyToMany', 'api::list.list'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::reel.reel'> &
       Schema.Attribute.Private;
+    longitude: Schema.Attribute.Float;
     media: Schema.Attribute.Media<'images' | 'videos', true>;
+    prizes: Schema.Attribute.Relation<'manyToMany', 'api::prize.prize'>;
     publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID;
     source: Schema.Attribute.String & Schema.Attribute.DefaultTo<'instagram'>;
     source_id: Schema.Attribute.String & Schema.Attribute.Unique;
+    tags: Schema.Attribute.Relation<'manyToMany', 'api::tag.tag'>;
     taken_at: Schema.Attribute.DateTime;
+    title: Schema.Attribute.String;
+    types: Schema.Attribute.Relation<'manyToMany', 'api::type.type'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -768,7 +843,9 @@ export interface ApiTagTag extends Struct.CollectionTypeSchema {
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::tag.tag'> &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    posts: Schema.Attribute.Relation<'manyToMany', 'api::post.post'>;
     publishedAt: Schema.Attribute.DateTime;
+    reels: Schema.Attribute.Relation<'manyToMany', 'api::reel.reel'>;
     slug: Schema.Attribute.UID<'name'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -795,7 +872,9 @@ export interface ApiTypeType extends Struct.CollectionTypeSchema {
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::type.type'> &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
+    posts: Schema.Attribute.Relation<'manyToMany', 'api::post.post'>;
     publishedAt: Schema.Attribute.DateTime;
+    reels: Schema.Attribute.Relation<'manyToMany', 'api::reel.reel'>;
     slug: Schema.Attribute.UID<'name'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1362,6 +1441,7 @@ declare module '@strapi/strapi' {
       'api::category.category': ApiCategoryCategory;
       'api::global.global': ApiGlobalGlobal;
       'api::list.list': ApiListList;
+      'api::map.map': ApiMapMap;
       'api::media-metadata.media-metadata': ApiMediaMetadataMediaMetadata;
       'api::post.post': ApiPostPost;
       'api::prize.prize': ApiPrizePrize;

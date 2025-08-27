@@ -35,24 +35,11 @@ const StoryPage = () => {
 
   useEffect(() => {
     if (!isLoading && stories && !target) {
-      // unknown slug -> back to gallery
-      navigate('/gallery', { replace: true });
+      // unknown slug -> back to stories gallery
+      navigate('/stories', { replace: true });
     }
   }, [isLoading, stories, target, navigate]);
-
-  // Redirect geo stories to map once target is known (preserve ?panel and ?from)
-  useEffect(() => {
-    if (target && target.geo) {
-      const params = new URLSearchParams(window.location.search);
-      const panel = params.get('panel');
-      const from = params.get('from');
-      const base = `/map?story=${encodeURIComponent(target.handle || target.id)}`;
-      let to = base;
-      if (panel) to += `&panel=${encodeURIComponent(panel)}`;
-      if (from) to += `&from=${encodeURIComponent(from)}`;
-      navigate(to, { replace: true });
-    }
-  }, [target, navigate]);
+  // Removed legacy redirects to map; story viewer always opens directly
 
   // Close with Escape key
   useEffect(() => {
@@ -60,7 +47,7 @@ const StoryPage = () => {
       if (e.key === 'Escape') {
         const p = new URLSearchParams(window.location.search);
         const from = p.get('from');
-        if (from) navigate(decodeURIComponent(from)); else navigate('/gallery');
+        if (from) navigate(decodeURIComponent(from)); else navigate('/stories');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -114,7 +101,7 @@ const StoryPage = () => {
               onClick={() => {
                 const p = new URLSearchParams(window.location.search);
                 const from = p.get('from');
-                if (from) navigate(decodeURIComponent(from)); else navigate('/gallery');
+                if (from) navigate(decodeURIComponent(from)); else navigate('/stories');
               }}
               className="absolute top-4 right-4 z-10 h-10 w-10 rounded-full bg-gray-100 hover:bg-gray-200 transition flex items-center justify-center"
               aria-label="Fermer"
@@ -139,7 +126,7 @@ const StoryPage = () => {
           onClose={() => {
             const p = new URLSearchParams(window.location.search);
             const from = p.get('from');
-            if (from) navigate(decodeURIComponent(from)); else navigate('/gallery');
+            if (from) navigate(decodeURIComponent(from)); else navigate('/stories');
           }}
         />
       )}
