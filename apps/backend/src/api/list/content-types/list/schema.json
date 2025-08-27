@@ -96,6 +96,12 @@
     "location": {
       "type": "customField",
       "customField": "plugin::google-maps.location-picker"
+    },
+    "maps": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::map.map",
+      "mappedBy": "list"
     }
   }
 }

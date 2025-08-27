@@ -54,7 +54,7 @@ const GalleryPage = () => {
           const latest = new URL(window.location.href);
           const params = latest.searchParams;
           params.set('mv', nextMv);
-          navigate({ pathname: latest.pathname, search: `?${params.toString()}` }, { replace: true });
+          window.history.replaceState({}, '', `${latest.pathname}?${params.toString()}`);
           prevMvRef.current = nextMv;
         } catch {}
       }, 200);

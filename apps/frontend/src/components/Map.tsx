@@ -182,17 +182,28 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       // Enable animated expand/collapse during zoom (controlled by prop)
       animate: clusterAnimate,
       // Enable animation when adding markers (helps smoothness)
-      animateAddingMarkers: clusterAnimate,
+      animateAddingMarkers: false,
       // @ts-ignore Provided by leaflet.markercluster
       chunkedLoading: !!chunkedLoading,
       // Do not draw coverage polygon on hover/click
       showCoverageOnHover: false,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
-  const childMarkers = cluster.getAllChildMarkers();
-        const first = childMarkers[0] as any;
-        const thumbnailUrl = first?.thumbnailUrl || null;
-        const closed = Boolean(first?.isClosed);
+        const childMarkers = cluster.getAllChildMarkers();
+        // Choose a stable thumbnail across rapid re-creations to avoid flicker:
+        // pick the lexicographically smallest thumbnail URL among children.
+        let thumbnailUrl: string | null = null;
+        let closed = false;
+        try {
+          const urls = (childMarkers as any[])
+            .map(m => ({ url: m?.thumbnailUrl as string | undefined, closed: Boolean(m?.isClosed) }))
+            .filter(x => typeof x.url === 'string') as Array<{ url: string; closed: boolean }>;
+          if (urls.length) {
+            urls.sort((a, b) => a.url.localeCompare(b.url));
+            thumbnailUrl = urls[0].url;
+            closed = urls[0].closed;
+          }
+        } catch {}
         const scale = count > 10 ? (1 + 0.18 * Math.log10(1 + (count - 10) / 10)) : 1;
         return L.divIcon({
           html: `
@@ -435,13 +446,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         background: transparent !important;
         border: none !important;
       }
-  /* Subtle deploy/collapse */
+  /* Subtle deploy/collapse for individual story markers only */
   .zoom-in .custom-story-marker .marker-container { transform: scale(0.92); opacity: 0.8; }
   .zoom-in .custom-story-marker .marker-container, .zoom-out .custom-story-marker .marker-container { transition: transform 220ms ease, opacity 220ms ease; }
   .zoom-out .custom-story-marker .marker-container { transform: scale(1.06); opacity: 0.8; }
-  .zoom-in .custom-cluster-icon, .zoom-out .custom-cluster-icon { transition: transform 220ms ease, opacity 220ms ease; }
-  .zoom-in .custom-cluster-icon { transform: scale(0.92); opacity: 0.9; }
-  .zoom-out .custom-cluster-icon { transform: scale(1.06); opacity: 0.9; }
+  /* Disable extra transforms on cluster icons to avoid flicker */
+  .custom-cluster-icon { will-change: transform; backface-visibility: hidden; }
+  .custom-cluster-icon img { display:block; width:96px; height:170px; backface-visibility:hidden; transform: translateZ(0); }
     `;
     document.head.appendChild(styleEl);
 
@@ -475,16 +486,26 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       spiderfyOnEveryClick: useNativeClick,
       removeOutsideVisibleBounds: false,
       animate: clusterAnimate,
-      animateAddingMarkers: clusterAnimate,
+      animateAddingMarkers: false,
       // @ts-ignore Provided by leaflet.markercluster
       chunkedLoading: !!chunkedLoading,
       showCoverageOnHover: false,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
         const childMarkers = cluster.getAllChildMarkers();
-        const first = childMarkers[0] as any;
-        const thumbnailUrl = first?.thumbnailUrl || null;
-        const closed = Boolean(first?.isClosed);
+        // Choose a stable thumbnail across rapid re-creations to avoid flicker
+        let thumbnailUrl: string | null = null;
+        let closed = false;
+        try {
+          const urls = (childMarkers as any[])
+            .map(m => ({ url: m?.thumbnailUrl as string | undefined, closed: Boolean(m?.isClosed) }))
+            .filter(x => typeof x.url === 'string') as Array<{ url: string; closed: boolean }>;
+          if (urls.length) {
+            urls.sort((a, b) => a.url.localeCompare(b.url));
+            thumbnailUrl = urls[0].url;
+            closed = urls[0].closed;
+          }
+        } catch {}
         const scale = count > 10 ? (1 + 0.18 * Math.log10(1 + (count - 10) / 10)) : 1;
         return L.divIcon({
           html: `

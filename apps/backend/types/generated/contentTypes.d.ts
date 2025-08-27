@@ -597,6 +597,7 @@ export interface ApiListList extends Struct.CollectionTypeSchema {
     location: Schema.Attribute.JSON &
       Schema.Attribute.CustomField<'plugin::google-maps.location-picker'>;
     longitude: Schema.Attribute.Float;
+    maps: Schema.Attribute.Relation<'oneToMany', 'api::map.map'>;
     media: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',
       true
@@ -609,6 +610,39 @@ export interface ApiListList extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiMapMap extends Struct.CollectionTypeSchema {
+  collectionName: 'maps';
+  info: {
+    description: 'Editable map with Geoman shapes linked to a List';
+    displayName: 'Map';
+    pluralName: 'maps';
+    singularName: 'map';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    center_lat: Schema.Attribute.Float;
+    center_lng: Schema.Attribute.Float;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    description: Schema.Attribute.Text;
+    list: Schema.Attribute.Relation<'manyToOne', 'api::list.list'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::map.map'> &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    shapes: Schema.Attribute.JSON;
+    slug: Schema.Attribute.UID<'title'>;
+    title: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    zoom: Schema.Attribute.Integer;
   };
 }
 
@@ -1407,6 +1441,7 @@ declare module '@strapi/strapi' {
       'api::category.category': ApiCategoryCategory;
       'api::global.global': ApiGlobalGlobal;
       'api::list.list': ApiListList;
+      'api::map.map': ApiMapMap;
       'api::media-metadata.media-metadata': ApiMediaMetadataMediaMetadata;
       'api::post.post': ApiPostPost;
       'api::prize.prize': ApiPrizePrize;
