@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Map } from '@/components/Map';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { RestaurantCards } from '@/components/RestaurantCards';
@@ -24,8 +24,12 @@ const MapView = () => {
   // Search params (single hook instance used everywhere)
   const q = params.get('q');
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [selectedPanelId, setSelectedPanelId] = useState<string | undefined>(undefined);
+  // Fit-to-results bounds (precise fit) when user presses Enter in search
+  const [fitToBounds, setFitToBounds] = useState<[[number, number],[number, number]] | undefined>(undefined);
+  useEffect(() => { setFitToBounds(undefined); }, [selectedStory?.id, q]);
   const [showMobileList, setShowMobileList] = useState(false);
   // Initial /map view to show France (left) and Japan (right) with margins per layout
   const parseMv = () => {
@@ -46,14 +50,27 @@ const MapView = () => {
 
   const writeMv = (center: { lat: number; lng: number }, zoom: number) => {
     try {
-      const sp = new URLSearchParams(window.location.search);
+      const sp = new URLSearchParams(location.search);
       sp.set('mv', `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`);
-      const url = `${window.location.pathname}?${sp.toString()}`;
-      window.history.replaceState({}, '', url);
+      navigate({ pathname: location.pathname, search: `?${sp.toString()}` }, { replace: true });
     } catch {}
   };
 
   const computeInitialView = () => {
+    // 1) Respect explicit mv param if present in URL
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const mv = sp.get('mv');
+      if (mv) {
+        const [latS, lngS, zS] = mv.split(',');
+        const lat = parseFloat(latS);
+        const lng = parseFloat(lngS);
+        const z = parseInt(zS, 10);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(z)) {
+          return { center: { lat, lng }, zoom: z } as const;
+        }
+      }
+    } catch {}
     try {
       // Treat hard reloads as a fresh instance: ignore persisted view
       const nav = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined);
@@ -182,12 +199,35 @@ const MapView = () => {
     }
   }, [params.get('fit')]);
 
-  // Recenter map whenever a new story is selected (if it has geo)
+  // Recenter map whenever a new story is selected (if it has geo), unless an mv param is present
   useEffect(() => {
-    if (selectedStory?.geo) {
-      setMapView({ center: selectedStory.geo, zoom: 16 });
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const hasMv = !!sp.get('mv');
+      if (!hasMv && selectedStory?.geo) {
+        setMapView({ center: selectedStory.geo, zoom: 16 });
+      }
+    } catch {
+      if (selectedStory?.geo) setMapView({ center: selectedStory.geo, zoom: 16 });
     }
   }, [selectedStory?.id]);
+
+  // When mv param changes, always refresh the map view to mv
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const mv = sp.get('mv');
+      if (mv) {
+        const [latS, lngS, zS] = mv.split(',');
+        const lat = parseFloat(latS);
+        const lng = parseFloat(lngS);
+        const z = parseInt(zS, 10);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(z)) {
+          setMapView({ center: { lat, lng }, zoom: z });
+        }
+      }
+    } catch {}
+  }, [params.get('mv')]);
 
   // Select story by ?story=slug on first load; honor optional ?panel=<panelId>
   useEffect(() => {
@@ -436,6 +476,8 @@ const MapView = () => {
                 onBoundsChange={(b) => {
                   try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                 }}
+                fitBounds={fitToBounds}
+                  fitBounds={fitToBounds}
                 fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
@@ -460,6 +502,7 @@ const MapView = () => {
                       onBoundsChange={(b) => {
                         try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                       }}
+                      fitBounds={fitToBounds}
                       clusterAnimate={clusterAnim}
                       centerOffsetPixels={{ x: 0, y: -95 }}
                     />
@@ -534,6 +577,8 @@ const MapView = () => {
                 onBoundsChange={(b) => {
                   try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                 }}
+                fitBounds={fitToBounds}
+                  fitBounds={fitToBounds}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
               />

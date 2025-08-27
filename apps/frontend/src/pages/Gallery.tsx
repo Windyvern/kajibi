@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { LatestArticlesGallery } from '@/components/LatestArticlesGallery';
+import { Map } from '@/components/Map';
 import { TwoPanelStoryViewer } from '@/components/TwoPanelStoryViewer';
 import { useStories } from '@/hooks/useStories';
 import { Story } from '@/types/story';
@@ -17,13 +18,36 @@ const GalleryPage = () => {
   const { data: stories, isLoading, error } = useStories();
   const [selected, setSelected] = useState<Story | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const { showClosed } = useOptions();
+  const { showClosed, galleryMap } = useOptions();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
   const listParam = params.get('list');
   const prizeParam = params.get('prize');
   const q = params.get('q');
+  const isMap = params.get('style') === 'map';
+  const selectedSlug = params.get('story');
+  const selectedPanel = params.get('panel') || undefined;
+  const selectedStory = selectedSlug ? (stories || []).find(s => (s.handle || s.id).toLowerCase() === selectedSlug.toLowerCase()) || null : null;
+  // Parse mv/+persist regardless of mode to keep hooks order stable
+  const parseMv = () => {
+    try {
+      const mv = params.get('mv');
+      if (!mv) return null;
+      const [latS, lngS, zS] = mv.split(',');
+      const lat = parseFloat(latS); const lng = parseFloat(lngS); const z = parseInt(zS, 10);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(z)) return { center: { lat, lng }, zoom: z } as const;
+    } catch {}
+    return null;
+  };
+  const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>(() => parseMv() || { center: { lat: 41.5, lng: 70 }, zoom: 3 });
+  const writeMv = (center: { lat: number; lng: number }, zoom: number) => {
+    try {
+      const next = new URLSearchParams(location.search);
+      next.set('mv', `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`);
+      navigate({ pathname: location.pathname, search: `?${next.toString()}` }, { replace: true });
+    } catch {}
+  };
   // Restore scroll if returning from a story in gallery context
   const locKey = `${location.pathname}${location.search}`;
   useEffect(() => {
@@ -37,6 +61,20 @@ const GalleryPage = () => {
       }
     } catch {}
   }, [locKey]);
+
+  // Restore scroll when returning from map view toggle
+  useEffect(() => {
+    try {
+      const k = `scroll:/stories`;
+      const v = sessionStorage.getItem(k);
+      if (v) {
+        window.requestAnimationFrame(() => {
+          window.scrollTo(0, parseInt(v, 10) || 0);
+          sessionStorage.removeItem(k);
+        });
+      }
+    } catch {}
+  }, []);
 
   if (isLoading) {
     return (
@@ -89,7 +127,7 @@ const GalleryPage = () => {
     if (zRaw) lastZoom = parseInt(zRaw, 10);
   } catch {}
 
-  // Build optional sections: visible on map first, then recent stories
+  // Build optional sections: visible on map first (only for zoom >= 6), then recent stories
   let sections: Array<{ title: string; stories: Story[] }> | undefined;
   try {
     const bRaw = sessionStorage.getItem('view:map:bounds');
@@ -101,9 +139,8 @@ const GalleryPage = () => {
         const g = s.geo;
         if (g && g.lat <= b.north && g.lat >= b.south && g.lng <= b.east && g.lng >= b.west) inBounds.push(s); else outBounds.push(s);
       }
-      // Only section when zoom is beyond the broad default view (<=3 is considered default)
-      const isDefaultZoom = (lastZoom == null) || (lastZoom <= 3);
-      if (!isDefaultZoom && inBounds.length > 0) {
+      const showInBounds = (lastZoom != null) && (lastZoom >= 6);
+      if (showInBounds && inBounds.length > 0) {
         const outSorted = [...outBounds].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
         sections = [
           { title: 'Adresses visibles sur la carte', stories: inBounds },
@@ -140,6 +177,72 @@ const GalleryPage = () => {
     return null;
   })();
 
+  // Map view: full height map with fixed header
+  if (isMap) {
+    const selectedSlug = params.get('story');
+    const selectedPanel = params.get('panel') || undefined;
+    const selectedStory = selectedSlug ? (stories || []).find(s => (s.handle || s.id).toLowerCase() === selectedSlug.toLowerCase()) || null : null;
+    // When selected story changes in map mode, center to it
+    useEffect(() => {
+      if (selectedStory?.geo) {
+        setMapView({ center: selectedStory.geo, zoom: 16 });
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedStory?.id]);
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="fixed top-3 left-3 right-3 z-[11000]" data-lov-id="src/pages/Gallery.tsx:145:6">
+          <SearchHeader
+            dataLovId="src/pages/Gallery.tsx:145:6"
+            viewToggleMode="route"
+            showFilters={filtersOpen}
+            onToggleFilters={() => setFiltersOpen(o => !o)}
+            listsButtonVariant="outline"
+          />
+        </div>
+        <div className="h-[100svh] w-full">
+          <Map
+            stories={displayedStories.filter(s => s.geo)}
+            onStorySelect={(story) => {
+              const pid = q ? matchedPanelByStory[story.id] : undefined;
+              const next = new URLSearchParams(location.search);
+              next.set('style', 'map');
+              next.set('story', (story.handle || story.id));
+              if (pid) next.set('panel', pid); else next.delete('panel');
+              const from = params.get('from');
+              if (from) next.set('from', from);
+              navigate({ pathname: location.pathname, search: `?${next.toString()}` });
+            }}
+            center={mapView.center}
+            zoom={mapView.zoom}
+            onViewChange={(c,z)=> { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
+            fitPadding={80}
+            centerOffsetPixels={{ x: 0, y: -95 }}
+            selectedStoryId={selectedStory?.id}
+          />
+          {selectedStory && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[12000]">
+              <div style={{ width: '56.25vh', height: '100vh' }} className="pointer-events-auto">
+                <TwoPanelStoryViewer
+                  initialStoryId={selectedStory.id}
+                  initialPanelId={selectedPanel}
+                  stories={displayedStories}
+                  onClose={() => {
+                    const next = new URLSearchParams(location.search);
+                    next.delete('story');
+                    next.delete('panel');
+                    navigate({ pathname: location.pathname, search: `?${next.toString()}` });
+                  }}
+                  hideRightPanel
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background mt-12">
       {/* Responsive header with padding around search */}
@@ -163,7 +266,7 @@ const GalleryPage = () => {
               )}
             </h2>
             <button
-              onClick={() => navigate('/gallery')}
+              onClick={() => navigate('/stories')}
               className="text-sm text-gray-600 hover:text-gray-800"
             >
               × Fermer
@@ -172,23 +275,27 @@ const GalleryPage = () => {
         </div>
       )}
 
-  <LatestArticlesGallery
+      <LatestArticlesGallery
         stories={sections ? undefined : displayedStories}
         sections={sections}
         onSelect={(story) => {
           const pid = q ? matchedPanelByStory[story.id] : undefined;
-          const base = `/story/${encodeURIComponent(story.handle || story.id)}`;
           const current = `${location.pathname}${location.search}`;
-          // Save scroll position for gallery return
           try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}
-          const from = `from=${encodeURIComponent(current)}`;
-          navigate(
-            pid
-              ? `${base}?${from}&panel=${encodeURIComponent(pid)}`
-              : `${base}?${from}`
-          );
+          if (story.geo && galleryMap) {
+            const next = new URLSearchParams(location.search);
+            next.set('style', 'map');
+            next.set('story', (story.handle || story.id));
+            if (pid) next.set('panel', pid); else next.delete('panel');
+            next.set('from', encodeURIComponent(current));
+            navigate({ pathname: '/stories', search: `?${next.toString()}` });
+          } else {
+            const base = `/story/${encodeURIComponent(story.handle || story.id)}`;
+            const from = `from=${encodeURIComponent(current)}`;
+            navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
+          }
         }}
-  />
+      />
 
       {/* Viewer is now handled by /story/:slug route */}
     </div>

@@ -474,7 +474,7 @@ export const TwoPanelStoryViewer = ({
       {/* Mute/Unmute aligned with controls, only for videos */}
       {currentPanel?.type === 'video' && (
         <button
-          onClick={() => { setMutedUI((m) => !m); setMuteToggleTick((t) => t + 1); }}
+          onClick={() => { setMutedUI((m) => { const v = !m; try { sessionStorage.setItem('storyViewer:muted', String(v)); } catch {}; return v; }); setMuteToggleTick((t) => t + 1); }}
           className="absolute top-44 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
           aria-label={mutedUI ? 'Unmute' : 'Mute'}
           data-ui-control="true"
@@ -635,7 +635,7 @@ export const TwoPanelStoryViewer = ({
 
           {currentPanel?.type === 'video' && (
             <button
-              onClick={() => { setMutedUI((m) => !m); setMuteToggleTick((t) => t + 1); }}
+              onClick={() => { setMutedUI((m) => { const v = !m; try { sessionStorage.setItem('storyViewer:muted', String(v)); } catch {}; return v; }); setMuteToggleTick((t) => t + 1); }}
               className="absolute top-44 left-4 z-30 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-all duration-200"
               aria-label={mutedUI ? 'Unmute' : 'Mute'}
               data-ui-control="true"

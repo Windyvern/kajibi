@@ -25,7 +25,7 @@ export default function MentionsIndexPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="px-4 md:px-6 pt-4">
-        <SearchHeader />
+        <SearchHeader routeBase="/mentions" />
       </div>
       <div className="p-6">
         <h2 className="text-2xl font-bold mb-6 text-foreground">Mentions</h2>

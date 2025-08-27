@@ -11,6 +11,8 @@ interface OptionsState {
   setClusterAnim: (v: boolean) => void;
   vegMode: VegMode;
   setVegMode: (v: VegMode) => void;
+  galleryMap: boolean; // Carte en vue Galerie
+  setGalleryMap: (v: boolean) => void;
 }
 
 const OptionsContext = createContext<OptionsState | undefined>(undefined);
@@ -33,13 +35,14 @@ export const OptionsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [darkMode, setDarkMode] = useState<boolean>(stored?.darkMode ?? false);
   const [clusterAnim, setClusterAnim] = useState<boolean>(stored?.clusterAnim ?? true);
   const [vegMode, setVegMode] = useState<VegMode>(stored?.vegMode ?? 'off');
+  const [galleryMap, setGalleryMap] = useState<boolean>(stored?.galleryMap ?? true);
 
   // Persist to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ showClosed, darkMode, clusterAnim, vegMode }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ showClosed, darkMode, clusterAnim, vegMode, galleryMap }));
     } catch {}
-  }, [showClosed, darkMode, clusterAnim, vegMode]);
+  }, [showClosed, darkMode, clusterAnim, vegMode, galleryMap]);
 
   const value = useMemo<OptionsState>(() => ({
     showClosed,
@@ -50,7 +53,9 @@ export const OptionsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setClusterAnim,
     vegMode,
     setVegMode,
-  }), [showClosed, darkMode, clusterAnim, vegMode]);
+    galleryMap,
+    setGalleryMap,
+  }), [showClosed, darkMode, clusterAnim, vegMode, galleryMap]);
 
   return (
     <OptionsContext.Provider value={value}>{children}</OptionsContext.Provider>

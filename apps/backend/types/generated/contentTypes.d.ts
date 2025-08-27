@@ -594,7 +594,8 @@ export interface ApiListList extends Struct.CollectionTypeSchema {
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::list.list'> &
       Schema.Attribute.Private;
-    location_label: Schema.Attribute.String;
+    location: Schema.Attribute.JSON &
+      Schema.Attribute.CustomField<'plugin::google-maps.location-picker'>;
     longitude: Schema.Attribute.Float;
     media: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',

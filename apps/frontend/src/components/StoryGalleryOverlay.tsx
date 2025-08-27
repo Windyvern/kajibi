@@ -16,10 +16,10 @@ export const StoryGalleryOverlay = ({
   onClose 
 }: StoryGalleryOverlayProps) => {
   return (
-    <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-sm">
+    <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-sm mb-3 px-3">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 text-white">
-        <h3 className="text-lg font-semibold">Story Gallery</h3>
+      <div className="flex items-center justify-between mt-3 p-4 text-white">
+        <h3 className="text-lg font-semibold">Contenu</h3>
         <button
           onClick={onClose}
           className="p-2 rounded-full hover:bg-white/20 transition-colors"
@@ -29,7 +29,7 @@ export const StoryGalleryOverlay = ({
       </div>
 
       {/* Gallery Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 overflow-y-auto max-h-[calc(100vh-80px)]">
+      <div className="grid grid-cols-3 md:grid-cols-3 gap-3 p-4 overflow-y-auto max-h-[calc(100vh-80px)]">
         {story.panels.map((panel, index) => (
           <button
             key={panel.id}

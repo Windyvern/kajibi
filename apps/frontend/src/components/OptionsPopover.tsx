@@ -7,7 +7,7 @@ interface OptionsPopoverProps {
 }
 
 export const OptionsPopover = ({ align = 'right' }: OptionsPopoverProps) => {
-  const { showClosed, setShowClosed, darkMode, setDarkMode, clusterAnim, setClusterAnim, vegMode, setVegMode } = useOptions();
+  const { showClosed, setShowClosed, darkMode, setDarkMode, clusterAnim, setClusterAnim, vegMode, setVegMode, galleryMap, setGalleryMap } = useOptions();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -39,6 +39,12 @@ export const OptionsPopover = ({ align = 'right' }: OptionsPopoverProps) => {
                 {/* Reverse logic: true = show closed, false = hide closed (visuals unchanged) */}
                 <button onClick={() => setShowClosed(!showClosed)} className={`relative w-12 h-6 rounded-full ${showClosed ? 'bg-green-500' : 'bg-red-500'}`}>
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${showClosed ? 'translate-x-6' : ''}`} />
+                </button>
+            </div>
+            <div className="flex items-center justify-between py-2">
+                <span className="text-sm">Carte en vue Galerie</span>
+                <button onClick={() => setGalleryMap(!galleryMap)} className={`relative w-12 h-6 rounded-full ${galleryMap ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${galleryMap ? 'translate-x-6' : ''}`} />
                 </button>
             </div>
             <div className="flex items-center justify-between py-2 opacity-60 cursor-not-allowed" title="Bientôt disponible">

@@ -1,33 +1,43 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Map as MapIcon, Grid3X3 } from 'lucide-react';
 
-export function ViewToggle({ mode = 'route', showLabels = true }: { mode?: 'route' | 'query'; showLabels?: boolean }) {
+export function ViewToggle({ mode = 'route', showLabels = true, routeBase = '/stories' }: { mode?: 'route' | 'query'; showLabels?: boolean; routeBase?: string }) {
   const location = useLocation();
   const navigate = useNavigate();
 
   const params = new URLSearchParams(location.search);
   const isMap = (() => {
-    if (mode === 'route') return location.pathname.startsWith('/map');
+    if (mode === 'route') return location.pathname === routeBase && params.get('style') === 'map';
     return params.get('style') === 'map';
   })();
 
   const go = (target: 'map' | 'gallery') => {
     if (mode === 'route') {
-      // Preserve query params while switching between /map and /gallery
+      // Toggle between /stories and /stories?style=map
       const next = new URLSearchParams(params);
-      if (target === 'map' && !next.get('mv')) {
-        try {
-          const cRaw = sessionStorage.getItem('view:map:center');
-          const zRaw = sessionStorage.getItem('view:map:zoom');
-          if (cRaw && zRaw) {
-            const c = JSON.parse(cRaw) as { lat: number; lng: number };
-            const z = parseInt(zRaw, 10);
-            if (c && !Number.isNaN(z)) next.set('mv', `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(z)}`);
-          }
-        } catch {}
+      // Save current scroll position when leaving gallery for map, so we can restore on return
+      try {
+        if (target === 'map') {
+          sessionStorage.setItem(`scroll:${routeBase}`, String(window.scrollY));
+        }
+      } catch {}
+      if (target === 'map') {
+        if (!next.get('mv')) {
+          try {
+            const cRaw = sessionStorage.getItem('view:map:center');
+            const zRaw = sessionStorage.getItem('view:map:zoom');
+            if (cRaw && zRaw) {
+              const c = JSON.parse(cRaw) as { lat: number; lng: number };
+              const z = parseInt(zRaw, 10);
+              if (c && !Number.isNaN(z)) next.set('mv', `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(z)}`);
+            }
+          } catch {}
+        }
+        next.set('style', 'map');
+      } else {
+        next.delete('style');
       }
-      const path = target === 'map' ? '/map' : '/gallery';
-      navigate({ pathname: path, search: `?${next.toString()}` });
+      navigate({ pathname: routeBase, search: `?${next.toString()}` });
     } else {
       const next = new URLSearchParams(params);
       if (target === 'map') next.set('style', 'map'); else next.delete('style');

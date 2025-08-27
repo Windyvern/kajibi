@@ -13,6 +13,7 @@ export function SearchHeader({
   showFilters,
   onToggleFilters,
   searchBarClassName,
+  routeBase = '/stories',
 }: {
   dataLovId?: string;
   leftSlot?: ReactNode;
@@ -20,6 +21,7 @@ export function SearchHeader({
   showFilters?: boolean;
   onToggleFilters?: () => void;
   searchBarClassName?: string;
+  routeBase?: string;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -52,7 +54,8 @@ export function SearchHeader({
       case 'Stories': {
         const search = new URLSearchParams(location.search);
         if (mv && !search.get('mv')) search.set('mv', mv);
-        navigate({ pathname: '/map', search: `?${search.toString()}` });
+        search.set('style','map');
+        navigate({ pathname: '/stories', search: `?${search.toString()}` });
         break;
       }
       case 'Posts': {
@@ -113,7 +116,7 @@ export function SearchHeader({
             )}
           </div>
           <OptionsPopover />
-          <ViewToggle mode={viewToggleMode} />
+          <ViewToggle mode={viewToggleMode} routeBase={routeBase} />
         </div>
       </div>
 
@@ -152,7 +155,7 @@ export function SearchHeader({
               )}
             </div>
             <OptionsPopover />
-            <ViewToggle mode={viewToggleMode} />
+            <ViewToggle mode={viewToggleMode} routeBase={routeBase} />
           </div>
         </div>
       </div>

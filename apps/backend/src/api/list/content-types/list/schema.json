@@ -93,9 +93,9 @@
       "type": "float",
       "required": false
     },
-    "location_label": {
-      "type": "string",
-      "required": false
+    "location": {
+      "type": "customField",
+      "customField": "plugin::google-maps.location-picker"
     }
   }
 }

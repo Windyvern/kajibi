@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import MapView from "./pages/MapView";
 import Gallery from "./pages/Gallery";
+import Stories from "./pages/Stories";
 import Story from "./pages/Story";
 import Lists from "./pages/Lists";
 import ListDetail from "./pages/ListDetail";
@@ -33,9 +34,9 @@ const App = () => (
       <OptionsProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/map" replace />} />
-          <Route path="/map" element={<MapView />} />
-          <Route path="/gallery" element={<Gallery />} />
+          <Route path="/" element={<Navigate to="/stories?style=map" replace />} />
+          <Route path="/map" element={<Navigate to="/stories?style=map" replace />} />
+          <Route path="/stories" element={<Stories />} />
           <Route path="/lists" element={<Lists />} />
           <Route path="/lists/:slug" element={<ListDetail />} />
           <Route path="/lists/:slug/map" element={<ListMapViewer />} />

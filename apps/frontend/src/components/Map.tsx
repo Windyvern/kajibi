@@ -102,7 +102,7 @@ interface MapProps {
 // Use bundler-imported assets to ensure availability
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -139,6 +139,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         ? clusterRadiusByZoom(z)
         : (z < 6 ? 120 : z < 12 ? 90 : 50)),
       zoomToBoundsOnClick: false,
+      spiderfyOnEveryClick: nativeClusterClick,
       // Keep markers rendered even when slightly offscreen to avoid despawn
       removeOutsideVisibleBounds: false,
       // Enable animated expand/collapse during zoom (controlled by prop)
@@ -172,7 +173,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   mapInstanceRef.current.addLayer(markersRef.current);
 
     // Apply custom padding when clicking clusters (override default focus)
-    markersRef.current.on('clusterclick', (a: any) => {
+    if (!nativeClusterClick) markersRef.current.on('clusterclick', (a: any) => {
       try {
         const b = a.layer.getBounds();
         const map = mapInstanceRef.current;
@@ -366,27 +367,24 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       .cluster-counter {
         position: absolute;
         top: 8px;
-        right: -12px;
+        right: 0;
+        transform: translateX(50%);
         background-color: red;
         color: white;
         font-family: 'Inter', sans-serif;
         font-size: 12px;
         font-weight: 700;
-        height: 28px;
-        min-width: 28px;
+        height: 24px;
         padding: 0 8px;
-        border-radius: 14px;
-        display: flex;
+        border-radius: 9999px;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         line-height: 1;
         box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
       }
       .cluster-counter.cluster-small {
-        width: 28px;
-        min-width: 28px;
-        padding: 0;
-        border-radius: 50%;
+        min-width: 24px;
       }
       .custom-cluster-icon {
         background: transparent !important;
@@ -430,6 +428,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         ? clusterRadiusByZoom(z)
         : (z < 6 ? 120 : z < 12 ? 90 : 50)),
       zoomToBoundsOnClick: false,
+      spiderfyOnEveryClick: nativeClusterClick,
       removeOutsideVisibleBounds: false,
       animate: clusterAnimate,
       showCoverageOnHover: false,
@@ -458,7 +457,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     });
     map.addLayer(markersRef.current);
     // Rebind cluster click with custom padding after recreation
-    markersRef.current.on('clusterclick', (a: any) => {
+    if (!nativeClusterClick) markersRef.current.on('clusterclick', (a: any) => {
       try {
         const b = a.layer.getBounds();
         const extraLR = 50, extraTB = 100;
@@ -498,6 +497,8 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
       // Prefer provided story.thumbnail (guaranteed image), else first image panel
       const firstImagePanel = story.panels.find(p => p.type === 'image');
+      const firstVideoPanel = story.panels.find(p => p.type === 'video');
+      const videoUrl = firstVideoPanel?.media || (story.thumbnail && /\.(mp4|mov|webm)$/i.test(story.thumbnail) ? story.thumbnail : undefined);
       const thumbnailUrl = story.thumbnail || firstImagePanel?.media || null;
 
       const isSelected = story.id === selectedStoryId;
@@ -656,7 +657,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   const padRight = fitPadding + renderPad.current.right + extraLR;
   const padTop = fitPadding + renderPad.current.top + extraTB;
   const padBottom = fitPadding + renderPad.current.bottom + extraTB;
-  map.fitBounds(b, { paddingTopLeft: L.point(padLeft, padTop), paddingBottomRight: L.point(padRight, padBottom), animate: false });
+  map.fitBounds(b, { paddingTopLeft: L.point(padLeft, padTop), paddingBottomRight: L.point(padRight, padBottom), animate: false, maxZoom: 16 });
       lastFitKeyRef.current = key;
     } catch {}
   }, [fitBounds, fitPadding]);

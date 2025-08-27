@@ -108,10 +108,16 @@ const AuthorDetailPage = () => {
                 navigate(`${base}?from=${encodeURIComponent(current)}`);
               }}
               selectedStoryId={undefined}
-              center={{ lat: 48.8566, lng: 2.3522 }}
-              zoom={4}
               onViewChange={() => {}}
-              fitPadding={40}
+              fitBounds={(function(){
+                const withGeo = visibleStories.filter(s=>s.geo);
+                if (withGeo.length < 1) return undefined as any;
+                let minLat=withGeo[0]!.geo!.lat, maxLat=minLat, minLng=withGeo[0]!.geo!.lng, maxLng=minLng;
+                withGeo.forEach(s=>{ const g=s.geo!; minLat=Math.min(minLat,g.lat); maxLat=Math.max(maxLat,g.lat); minLng=Math.min(minLng,g.lng); maxLng=Math.max(maxLng,g.lng); });
+                return [[minLat,minLng],[maxLat,maxLng]] as [[number,number],[number,number]];
+              })()}
+              fitPadding={80}
+              centerOffsetPixels={{ x: 0, y: -95 }}
             />
           </div>
         ) : (

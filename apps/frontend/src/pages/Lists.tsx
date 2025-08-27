@@ -48,7 +48,7 @@ const ListsPage = () => {
     <div className="min-h-screen bg-background">
       {/* Header with centered search and right nav (desktop), stacked on mobile */}
       <div className="px-4 md:px-6 pt-4">
-        <SearchHeader viewToggleMode="route" showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o=>!o)} />
+        <SearchHeader routeBase="/lists" viewToggleMode="route" showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o=>!o)} />
       </div>
 
       {!isMap && (
