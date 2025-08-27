@@ -13,13 +13,23 @@ export default ({ env }) => {
         contentSecurityPolicy: {
           useDefaults: true,
           directives: {
-            // Allow Google Maps admin plugin to load its script from maps.googleapis.com
+            // Allow Google Maps admin plugin and assets
             "script-src": [
               "'self'",
               ...(strictCsp ? [] : ["'unsafe-inline'", "'unsafe-eval'"]),
               'https://maps.googleapis.com',
+              'https://maps.gstatic.com',
             ],
-            "style-src": ["'self'", ...(strictCsp ? [] : ["'unsafe-inline'"])],
+            "style-src": [
+              "'self'",
+              ...(strictCsp ? [] : ["'unsafe-inline'"]),
+              'https://fonts.googleapis.com',
+            ],
+            "font-src": [
+              "'self'",
+              'data:',
+              'https://fonts.gstatic.com',
+            ],
             "img-src": ["'self'", 'data:', 'blob:', 'https:', 'http:'],
             "media-src": ["'self'", 'data:', 'blob:', 'https:', 'http:'],
             "connect-src": [

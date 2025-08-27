@@ -752,3 +752,49 @@ export default {
   // Initial attempt
   try { replaceResetWithApply(); } catch {}
 })();
+
+// Inject a floating "Append media" button on Article edit view
+(() => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const ensure = () => {
+    try {
+      const path = window.location.pathname || '';
+      const m = path.match(/\/content-manager\/collectionType\/api::article\.article\/(\d+)/);
+      const articleId = m ? m[1] : null;
+      const existing = document.querySelector('#append-media-action');
+      if (!articleId) {
+        if (existing && existing.parentNode) existing.parentNode.removeChild(existing as any);
+        return;
+      }
+      if (existing) return;
+      const btn = document.createElement('button');
+      btn.id = 'append-media-action';
+      btn.textContent = 'Append media';
+      Object.assign(btn.style, {
+        position: 'fixed', top: '110px', right: '24px', zIndex: '9999', padding: '8px 12px', borderRadius: '8px',
+        border: '1px solid rgba(0,0,0,0.1)', background: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', cursor: 'pointer'
+      } as CSSStyleDeclaration);
+      btn.title = 'Uses saved append_article to merge and hide donor';
+      btn.onclick = async () => {
+        try {
+          btn.setAttribute('disabled', 'true');
+          btn.textContent = 'Appending…';
+          const token = (window as any)?.strapi?.admin?.auth?.getToken?.() || '';
+          const res = await fetch(`/api/articles/${articleId}/append`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          btn.textContent = 'Appended ✓';
+          setTimeout(() => { btn.textContent = 'Append media'; btn.removeAttribute('disabled'); }, 1200);
+        } catch (e) {
+          btn.textContent = 'Failed';
+          setTimeout(() => { btn.textContent = 'Append media'; btn.removeAttribute('disabled'); }, 1500);
+        }
+      };
+      document.body.appendChild(btn);
+    } catch {}
+  };
+  let lastPath = '';
+  setInterval(() => {
+    const p = window.location.pathname;
+    if (p !== lastPath) { lastPath = p; ensure(); }
+  }, 500);
+})();

@@ -59,6 +59,24 @@ const MentionsPage = () => {
     }
   }, [prizeStories]);
 
+  // Compute bounds for all prize stories (map view)
+  const prizeBounds = useMemo(() => {
+    const pts = prizeStories.filter(s => s.geo).map(s => [s.geo!.lat, s.geo!.lng]) as [number, number][];
+    if (pts.length < 1) return null;
+    let north = -90, south = 90, east = -180, west = 180;
+    for (const [lat, lng] of pts) { north = Math.max(north, lat); south = Math.min(south, lat); east = Math.max(east, lng); west = Math.min(west, lng); }
+    return [[south, west], [north, east]] as [[number, number],[number, number]];
+  }, [prizeStories]);
+
+  // Extract current prize meta (name + icon)
+  const prizeMeta = useMemo(() => {
+    for (const s of prizeStories) {
+      const p = (s.prizes || []).find(p => (p.slug || p.id)?.toString() === slug);
+      if (p) return p;
+    }
+    return null as any;
+  }, [prizeStories, slug]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header with centered search and right nav (desktop), stacked on mobile */}
@@ -90,8 +108,18 @@ const MentionsPage = () => {
       </div>
 
       <div className="px-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">Mentions</h2>
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex flex-col gap-2">
+            <button className="text-sm text-muted-foreground hover:text-foreground" onClick={() => navigate('/mentions')}>
+              ← Mentions
+            </button>
+            <div className="flex items-center gap-3">
+              {prizeMeta?.iconUrl && (
+                <img src={prizeMeta.iconUrl} alt="" className="h-8 w-8 object-contain" style={{ filter: 'brightness(0) invert(1)' }} />
+              )}
+              <h2 className="text-2xl font-bold">{prizeMeta?.name || 'Mention'}</h2>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -105,14 +133,14 @@ const MentionsPage = () => {
               navigate(`${base}?from=${encodeURIComponent(current)}`);
             }}
             selectedStoryId={undefined}
-            center={{ lat: 48.8566, lng: 2.3522 }}
-            zoom={4}
             onViewChange={() => {}}
-            fitPadding={40}
+            fitBounds={prizeBounds || undefined}
+            fitPadding={80}
           />
         </div>
       ) : (
         <LatestArticlesGallery
+          title=""
           stories={orderedStories}
           onSelect={(story) => {
             const current = `${location.pathname}${location.search}`;

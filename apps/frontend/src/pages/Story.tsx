@@ -54,6 +54,22 @@ const StoryPage = () => {
     }
   }, [target, navigate]);
 
+  // Fallback: if slug not found, try find an article A where appendedFromSlug == slug, and redirect to A
+  useEffect(() => {
+    if (!stories || !slug || target) return;
+    const keeper = stories.find((s) => (s.appendedFromSlug || '').toLowerCase() === slug.toLowerCase());
+    if (keeper) {
+      const params = new URLSearchParams(window.location.search);
+      const panel = params.get('panel');
+      const from = params.get('from');
+      const base = `/map?story=${encodeURIComponent(keeper.handle || keeper.id)}`;
+      let to = base;
+      if (panel) to += `&panel=${encodeURIComponent(panel)}`;
+      if (from) to += `&from=${encodeURIComponent(from)}`;
+      navigate(to, { replace: true });
+    }
+  }, [stories, slug, target, navigate]);
+
   // Close with Escape key
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

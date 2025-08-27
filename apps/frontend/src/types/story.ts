@@ -19,6 +19,10 @@ export interface Story {
   authorSlug?: string;
   subtitle?: string;
   handle?: string;
+  // If another article (donor) was appended into this one, expose donor slug for redirect mapping
+  appendedFromSlug?: string;
+  appendedFromTitle?: string;
+  appendedFromUsername?: string;
   publishedAt: string;
   // Optional posted date for Posts/Reels (or articles when present)
   postedDate?: string;

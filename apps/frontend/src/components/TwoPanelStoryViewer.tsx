@@ -16,6 +16,7 @@ interface TwoPanelStoryViewerProps {
   rightPanelContent?: React.ReactNode;
   hideMetadataPanel?: boolean;
   hideRightPanel?: boolean;
+  onStoryChange?: (story: Story, index: number) => void;
 }
 
 export const TwoPanelStoryViewer = ({ 
@@ -26,6 +27,7 @@ export const TwoPanelStoryViewer = ({
   rightPanelContent,
   hideMetadataPanel,
   hideRightPanel,
+  onStoryChange,
 }: TwoPanelStoryViewerProps) => {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(() => {
     if (initialStoryId) {
@@ -61,6 +63,14 @@ export const TwoPanelStoryViewer = ({
   const currentStory = stories[currentStoryIndex];
   const hasPanels = (currentStory?.panels?.length || 0) > 0;
   const currentPanel = hasPanels ? currentStory?.panels[currentPanelIndex] : undefined;
+
+  // Notify parent when the current story changes
+  useEffect(() => {
+    if (currentStory && typeof onStoryChange === 'function') {
+      try { onStoryChange(currentStory, currentStoryIndex); } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStoryIndex, currentStory?.id]);
 
   // Simple prefetch of next image to reduce visible loading/cancellations
   useEffect(() => {

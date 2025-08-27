@@ -26,7 +26,16 @@ export const usePosts = () => {
     queryFn: async (): Promise<Story[]> => {
       const res = await strapiFetch<any>(
         '/api/posts',
-        'populate%5Bmedia%5D=true&populate%5Barticles%5D%5Bpopulate%5D=*&pagination%5BpageSize%5D=1000'
+        [
+          'populate%5Bmedia%5D=true',
+          // Populate only needed article fields to avoid circular populate causing 500
+          'populate%5Barticles%5D%5Bfields%5D%5B0%5D=slug',
+          'populate%5Barticles%5D%5Bfields%5D%5B1%5D=title',
+          'populate%5Barticles%5D%5Bfields%5D%5B2%5D=username',
+          'populate%5Barticles%5D%5Bpopulate%5D%5Bcover%5D=true',
+          'populate%5Barticles%5D%5Bpopulate%5D%5Bmedia%5D=true',
+          'pagination%5BpageSize%5D=1000',
+        ].join('&')
       );
       const data = res.data || [];
   return data.map((e: any) => {

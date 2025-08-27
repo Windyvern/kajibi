@@ -81,7 +81,15 @@ const GalleryPage = () => {
   let displayedStories = q ? filtered : baseStories;
   if (!showClosed) displayedStories = displayedStories.filter(s => !s.isClosed);
 
-  // Priority: Stories whose markers are currently within last map bounds go first
+  // Read last map zoom to decide default vs focused view
+  let lastZoom: number | null = null;
+  try {
+    const zRaw = sessionStorage.getItem('view:map:zoom');
+    if (zRaw) lastZoom = parseInt(zRaw, 10);
+  } catch {}
+
+  // Build optional sections: visible on map first, then recent stories
+  let sections: Array<{ title: string; stories: Story[] }> | undefined;
   try {
     const bRaw = sessionStorage.getItem('view:map:bounds');
     if (bRaw) {
@@ -92,10 +100,26 @@ const GalleryPage = () => {
         const g = s.geo;
         if (g && g.lat <= b.north && g.lat >= b.south && g.lng <= b.east && g.lng >= b.west) inBounds.push(s); else outBounds.push(s);
       }
-      // Preserve internal ordering: if search is active, we preserve search rank; else leave base ordering
-      displayedStories = [...inBounds, ...outBounds];
+      // Only section when zoom is beyond the broad default view (<=3 is considered default)
+      const isDefaultZoom = (lastZoom == null) || (lastZoom <= 3);
+      if (!isDefaultZoom && inBounds.length > 0) {
+        const outSorted = [...outBounds].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+        sections = [
+          { title: 'Adresses visibles sur la carte', stories: inBounds },
+          { title: 'Stories récentes', stories: outSorted },
+        ];
+      } else {
+        // Default zoom: show most recent overall
+        displayedStories = [...displayedStories].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      }
+    } else {
+      // No bounds available: default to most recent
+      displayedStories = [...displayedStories].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
     }
-  } catch {}
+  } catch {
+    // On error, default to most recent
+    displayedStories = [...displayedStories].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  }
 
   const listTitle = (() => {
     if (listParam) {
@@ -184,7 +208,8 @@ const GalleryPage = () => {
       )}
 
   <LatestArticlesGallery
-        stories={displayedStories}
+        stories={sections ? undefined : displayedStories}
+        sections={sections}
         onSelect={(story) => {
           const pid = q ? matchedPanelByStory[story.id] : undefined;
           const base = `/story/${encodeURIComponent(story.handle || story.id)}`;

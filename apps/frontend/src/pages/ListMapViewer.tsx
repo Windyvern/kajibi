@@ -101,6 +101,27 @@ const ListMapViewerPage = () => {
     return story;
   }, [list, mediaStories]);
 
+  // Preselect from URL params when arriving from list right-side gallery
+  useEffect(() => {
+    if (!list) return;
+    const s = params.get('s');
+    const m = params.get('m');
+    if (list.listType === 'media') {
+      if (m && mediaSuperStory) {
+        setSelected(mediaSuperStory);
+        const map = (mediaSuperStory as any)?.__panelIdByMarkerId as Map<string, string> | undefined;
+        const pid = map?.get(m);
+        if (pid) setSelectedPanelId(pid);
+      }
+    } else {
+      if (s) {
+        const found = listStories.find(st => (st.handle || st.id).toLowerCase() === s.toLowerCase());
+        if (found) setSelected(found);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list, mediaSuperStory]);
+
   if (!list) return null;
 
   const handleClose = () => navigate(-1);

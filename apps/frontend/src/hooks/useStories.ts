@@ -43,6 +43,8 @@ export const useStories = () => {
           '&populate%5Bauthor%5D%5Bpopulate%5D=avatar' +
           '&populate%5Bcategory%5D=true' +
           '&populate%5Btypes%5D=true' +
+          // Include appended donor for redirect mapping when needed
+          '&populate%5Bappend_article%5D=true' +
           // Prizes: include icon and colors
           '&populate%5Bprizes%5D%5Bpopulate%5D=icon' +
           // Populate media relation (Strapi returns all items for multi-media relations)
@@ -194,6 +196,12 @@ export const useStories = () => {
         const authorSlug: string | undefined = authorEntry?.slug || attrs.author?.slug || undefined;
         const authorAvatarUrl = getMediaUrl(authorEntry?.avatar) || getMediaUrl(attrs.avatar);
 
+        // Alias info from appended donor, if present
+        const appended = attrs.append_article?.data?.attributes || attrs.append_article || undefined;
+        const appendedSlug = appended?.slug || undefined;
+        const appendedTitle = appended?.title || undefined;
+        const appendedUsername = appended?.username || undefined;
+
         return {
           id: article.id.toString(),
           title: attrs.title,
@@ -201,6 +209,10 @@ export const useStories = () => {
           authorSlug,
           subtitle: undefined,
           handle: attrs.slug,
+          // Expose donor alias information for redirects and search
+          appendedFromSlug: appendedSlug,
+          appendedFromTitle: appendedTitle,
+          appendedFromUsername: appendedUsername,
           publishedAt: attrs.publishedAt || attrs.createdAt,
           postedDate: attrs.posted_date || attrs.postedDate || undefined,
           firstVisit: attrs.first_visit || undefined,

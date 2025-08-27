@@ -27,10 +27,42 @@ const MapView = () => {
   const [selectedPanelId, setSelectedPanelId] = useState<string | undefined>(undefined);
   const [showMobileList, setShowMobileList] = useState(false);
   // Initial /map view to show France (left) and Japan (right) with margins per layout
+  const parseMv = () => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const mv = sp.get('mv');
+      if (!mv) return null;
+      const [latS, lngS, zS] = mv.split(',');
+      const lat = parseFloat(latS);
+      const lng = parseFloat(lngS);
+      const z = parseInt(zS, 10);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(z)) {
+        return { center: { lat, lng }, zoom: z } as const;
+      }
+    } catch {}
+    return null;
+  };
+
+  const writeMv = (center: { lat: number; lng: number }, zoom: number) => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set('mv', `${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(zoom)}`);
+      const url = `${window.location.pathname}?${sp.toString()}`;
+      window.history.replaceState({}, '', url);
+    } catch {}
+  };
+
   const computeInitialView = () => {
     try {
-      const savedC = sessionStorage.getItem('view:map:center');
-      const savedZ = sessionStorage.getItem('view:map:zoom');
+      // Treat hard reloads as a fresh instance: ignore persisted view
+      const nav = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined);
+      const isReload = nav?.type === 'reload';
+      if (!isReload) {
+        const fromUrl = parseMv();
+        if (fromUrl) return fromUrl;
+      }
+      const savedC = isReload ? null : sessionStorage.getItem('view:map:center');
+      const savedZ = isReload ? null : sessionStorage.getItem('view:map:zoom');
       if (savedC && savedZ) {
         const c = JSON.parse(savedC);
         const z = parseInt(savedZ, 10);
@@ -329,7 +361,7 @@ const MapView = () => {
                   selectedStoryId={selectedStory?.id}
                   center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                   zoom={mapView.zoom}
-                  onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                  onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
                   fitPadding={40}
                   clusterAnimate={clusterAnim}
                   centerOffsetPixels={{ x: 0, y: -60 }}
@@ -360,6 +392,7 @@ const MapView = () => {
                   onBoundsChange={(b) => {
                     try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                   }}
+                  centerOffsetPixels={{ x: 0, y: -95 }}
                 />
               </div>
 
@@ -439,12 +472,13 @@ const MapView = () => {
                 selectedStoryId={undefined}
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
-                onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
                 onBoundsChange={(b) => {
                   try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                 }}
                 fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
                 clusterAnimate={clusterAnim}
+                centerOffsetPixels={{ x: 0, y: -95 }}
               />
             </div>
           )
@@ -462,12 +496,12 @@ const MapView = () => {
                       selectedStoryId={selectedStory?.id}
                       center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                       zoom={mapView.zoom}
-                      onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                      onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
                       onBoundsChange={(b) => {
                         try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                       }}
                       clusterAnimate={clusterAnim}
-                      centerOffsetPixels={{ x: 0, y: -60 }}
+                      centerOffsetPixels={{ x: 0, y: -95 }}
                     />
                   </div>
                   <div className="flex-1 min-h-0 bg-white overflow-hidden">
@@ -536,11 +570,12 @@ const MapView = () => {
                 selectedStoryId={undefined}
                 center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                 zoom={mapView.zoom}
-                onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
                 onBoundsChange={(b) => {
                   try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                 }}
                 clusterAnimate={clusterAnim}
+                centerOffsetPixels={{ x: 0, y: -95 }}
               />
             </div>
           )

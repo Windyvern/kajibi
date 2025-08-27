@@ -77,7 +77,7 @@ export default function PostsPage() {
 
       {/* Map view for posts with pins where geo exists (toggle) */}
       {isMap && (
-        <div className="h-[60vh]">
+        <div className="h-[100svh]">
           <Map
             stories={visible.filter(s => s.geo)}
             onStorySelect={(story) => {

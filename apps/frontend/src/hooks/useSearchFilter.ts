@@ -34,11 +34,13 @@ export function useSearchFilter(
   for (const s of stories) {
     const title = normalize(s.title);
     const username = normalize(s.username || s.author);
+    const aliasTitle = normalize(s.appendedFromTitle);
+    const aliasUser = normalize(s.appendedFromUsername);
     const address = normalize(s.address);
     const desc = normalize(s.description);
 
-    const titleHit = fields.title && title.includes(query);
-    const userHit = fields.username && username.includes(query);
+    const titleHit = fields.title && (title.includes(query) || (!!aliasTitle && aliasTitle.includes(query)));
+    const userHit = fields.username && (username.includes(query) || (!!aliasUser && aliasUser.includes(query)));
     const titleUserHit = titleHit || userHit;
     const addrHit = fields.address && address.includes(query);
     // If searching an @username, ignore matches from description/image descriptions

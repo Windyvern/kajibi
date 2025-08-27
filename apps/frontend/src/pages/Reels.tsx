@@ -75,7 +75,7 @@ export default function ReelsPage() {
       </div>
 
       {isMap && (
-        <div className="h-[60vh]">
+        <div className="h-[100svh]">
           <Map
             stories={visible.filter(s => s.geo)}
             onStorySelect={(story) => {

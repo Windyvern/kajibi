@@ -91,7 +91,7 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
             <span>{story.address}</span>
           </div>
         )}
-        <div className="text-sm text-gray-500 space-y-1 mb-2">
+        <div className="text-sm text-gray-500 space-y-1 mb-3">
           {(() => {
             const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
             if (story.postedDate) {
