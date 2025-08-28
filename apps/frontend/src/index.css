@@ -118,8 +118,8 @@ All colors MUST be HSL.
 .liquid-glass {
   position: relative;
   border-radius: 9999px;
-  background: hsla(var(--brand), 0.06);
-  border: 1px solid hsla(var(--brand), 0.25);
+  background: hsl(var(--brand) / 0.06);
+  border: 1px solid hsl(var(--brand) / 0.25);
   box-shadow: 0 8px 24px rgba(0,0,0,0.08);
   backdrop-filter: saturate(160%) blur(10px);
   -webkit-backdrop-filter: saturate(160%) blur(10px);
@@ -129,8 +129,8 @@ All colors MUST be HSL.
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  background: radial-gradient(1200px 1200px at 10% -20%, hsla(var(--brand), 0.12), transparent 40%),
-              radial-gradient(800px 800px at 110% 0%, hsla(var(--brand), 0.10), transparent 35%);
+  background: radial-gradient(1200px 1200px at 10% -20%, hsl(var(--brand) / 0.12), transparent 40%),
+              radial-gradient(800px 800px at 110% 0%, hsl(var(--brand) / 0.10), transparent 35%);
   pointer-events: none;
   z-index: 0;
 }

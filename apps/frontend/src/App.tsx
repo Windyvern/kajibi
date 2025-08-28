@@ -37,6 +37,7 @@ const App = () => (
           <Route path="/" element={<Navigate to="/stories?style=map" replace />} />
           <Route path="/map" element={<Navigate to="/stories?style=map" replace />} />
           <Route path="/stories" element={<Stories />} />
+          <Route path="/gallery" element={<Gallery />} />
           <Route path="/lists" element={<Lists />} />
           <Route path="/lists/:slug" element={<ListDetail />} />
           <Route path="/lists/:slug/map" element={<ListMapViewer />} />

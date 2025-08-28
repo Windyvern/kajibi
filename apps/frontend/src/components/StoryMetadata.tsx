@@ -156,7 +156,7 @@ export const StoryMetadata = ({ story, currentPanel, onHighlightSelect, hideUser
           <div className="flex gap-4 overflow-x-auto pb-1">
             {lists.map((l) => {
               const thumb = l.thumbnail || story.thumbnail;
-              const to = `/gallery?list=${encodeURIComponent(l.slug || l.id)}`;
+              const to = `/lists/${encodeURIComponent(l.slug || l.id)}`;
               return (
                 <Link key={l.id} to={to} className="group flex-shrink-0 text-center">
                   <div className="w-16 h-16 rounded-full overflow-hidden border border-gray-200 shadow-sm">

@@ -2,6 +2,7 @@ import { useParams, useNavigate, useLocation, useSearchParams } from 'react-rout
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ViewToggle } from '@/components/ViewToggle';
+import ListHeader from '@/components/ListHeader';
 import { useList } from '@/hooks/useList';
 import { useStories } from '@/hooks/useStories';
 import { LatestArticlesGallery, ListSidebarGallery } from '@/components/LatestArticlesGallery';
@@ -98,6 +99,11 @@ const ListDetailPage = () => {
   const storiesForMap = (listType === 'media') ? mediaStories : articleStories;
   const boundsForMap = computeBounds(storiesForMap);
 
+  // Header should reflect the currently displayed article/media when selected
+  const headerTitle = selectedMediaStory
+    ? selectedMediaStory.title
+    : (selectedStory ? selectedStory.title : (list?.name || ''));
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -117,16 +123,10 @@ const ListDetailPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="px-6 pt-4">
-        <div className="flex items-start gap-2 mb-2">
-          <div className="flex-1" />
-          <h1 className="text-2xl font-bold text-foreground text-center">{list.name}</h1>
-          <div className="flex-1 flex items-center justify-end">
-            <ViewToggle mode="query" />
-          </div>
-        </div>
+      <div className="px-6 mt-12">
+        <ListHeader></ListHeader>
         {list.description && (
           <p className="text-muted-foreground mb-4 text-center max-w-2xl mx-auto">{list.description}</p>
         )}
@@ -135,13 +135,10 @@ const ListDetailPage = () => {
       {/* Main content: two-panel (map left, gallery/viewer right) on larger screens */}
       {listType === 'media' ? (
         // MEDIA LISTS: map left; right shows gallery or unified viewer across all media
-        <div className="flex-1 w-full">
+        <div className="flex-1 w-full mt-[85px] md:mt-12">
           <div className="grid w-full h-full bg-white" style={{ gridTemplateColumns: '1fr 56.25vh' }}>
             {/* Left: Map */}
             <div className="min-w-0">
-                      <div className="flex items-center gap-4 mb-4">
-          <button onClick={() => navigate('/lists')} className="text-sm text-gray-600 hover:text-gray-800">← Listes</button>
-        </div>
               <Map
                 stories={mediaStories}
                 onStorySelect={(s) => {
@@ -227,9 +224,9 @@ const ListDetailPage = () => {
                   heading={list.name}
                   stories={articleStories}
                   onSelect={(s) => {
-                    // Open full-screen list map viewer focusing the clicked story
-                    const slugOrId = encodeURIComponent(s.handle || s.id);
-                    navigate(`/lists/${encodeURIComponent(list.slug || list.id)}/map?s=${slugOrId}`);
+                    // Behave like clicking the corresponding map marker
+                    setSelectedStory(s);
+                    if (s.geo) setMapView(v => ({ center: s.geo!, zoom: v.zoom }));
                   }}
                 />
               )}

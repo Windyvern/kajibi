@@ -147,6 +147,10 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   const defaultCenterOffset = useRef<{ x: number; y: number }>({ x: 0, y: -95 }); // center on visual middle of 190px marker
   const lastZoomRef = useRef<number | null>(null);
   const lastFocusedRef = useRef<{ lat: number; lng: number } | null>(null);
+  // Suppress accidental single-clicks when user performs double-tap + drag zoom
+  const lastTapTSRef = useRef<number>(0);
+  const lastTapXYRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const suppressClicksUntilRef = useRef<number>(0);
   // Lazy imports for assets (vite resolves at build time)
   let avatarUrl: string | undefined;
   let igUrl: string | undefined;
@@ -156,10 +160,10 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
-      // Initialize map
+    // Initialize map
       const initCenter: [number, number] = center ? [center.lat, center.lng] : [39.8283, -98.5795];
       const initZoom: number = typeof zoom === 'number' ? zoom : 4;
-      mapInstanceRef.current = L.map(mapRef.current, {
+    mapInstanceRef.current = L.map(mapRef.current, {
         zoomControl: false,
         zoomAnimation: true,
         markerZoomAnimation: true,
@@ -181,7 +185,50 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         doubleTapDragZoom: 'center',
         // @ts-ignore plugin option
         doubleTapDragZoomOptions: { reverse: true },
-      }).setView(initCenter, initZoom);
+    }).setView(initCenter, initZoom);
+
+    // Install global click suppression for mobile double-tap-drag gesture
+    try {
+      const container = mapRef.current as HTMLDivElement;
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      if (isMobile && container) {
+        const onTouchStart = (e: TouchEvent) => {
+          if (e.touches.length !== 1) return;
+          const t = e.touches[0];
+          const now = Date.now();
+          const dx = Math.abs(t.clientX - lastTapXYRef.current.x);
+          const dy = Math.abs(t.clientY - lastTapXYRef.current.y);
+          const within = (now - lastTapTSRef.current) < 450 && dx < 36 && dy < 36;
+          if (within) {
+            // Likely double-tap starting: suppress single-clicks momentarily
+            suppressClicksUntilRef.current = now + 800;
+          }
+          lastTapTSRef.current = now;
+          lastTapXYRef.current = { x: t.clientX, y: t.clientY };
+        };
+        const onClickCapture = (ev: Event) => {
+          if (Date.now() < suppressClicksUntilRef.current) {
+            ev.stopImmediatePropagation?.();
+            ev.stopPropagation();
+            ev.preventDefault();
+          }
+        };
+        container.addEventListener('touchstart', onTouchStart, { passive: true });
+        container.addEventListener('click', onClickCapture, true);
+        // Also gate map preclick to be safe
+        mapInstanceRef.current.on('preclick', (a: any) => {
+          if (Date.now() < suppressClicksUntilRef.current) {
+            try { a.originalEvent && a.originalEvent.preventDefault(); } catch {}
+          }
+        });
+        // Cleanup
+        const cleanup = () => {
+          try { container.removeEventListener('touchstart', onTouchStart as any); } catch {}
+          try { container.removeEventListener('click', onClickCapture as any, true); } catch {}
+        };
+        (mapInstanceRef.current as any).__suppressCleanup = cleanup;
+      }
+    } catch {}
 
     // Add tile layer (Carto light style to match legacy design)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
@@ -250,6 +297,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
     // Apply custom padding when clicking clusters (override default focus)
     if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
+      if (Date.now() < suppressClicksUntilRef.current) { try { a.originalEvent?.preventDefault?.(); } catch {}; return; }
       try {
         const b = a.layer.getBounds();
         const map = mapInstanceRef.current;
@@ -483,6 +531,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
+        try { (mapInstanceRef.current as any).__suppressCleanup?.(); } catch {}
         mapInstanceRef.current = null;
       }
       if (styleEl && styleEl.parentNode) {
@@ -552,6 +601,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     try { lastStoriesSigRef.current = null; } catch {}
     // Rebind cluster click with custom padding after recreation
     if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
+      if (Date.now() < suppressClicksUntilRef.current) { try { a.originalEvent?.preventDefault?.(); } catch {}; return; }
       try {
         const b = a.layer.getBounds();
         const extraLR = 50, extraTB = 100;
@@ -654,6 +704,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   (marker as any).isClosed = story.isClosed;
       
       marker.on('click', () => {
+        if (Date.now() < suppressClicksUntilRef.current) return;
         if (!suppressZoomOnMarkerClick) {
           // Center and zoom to street level before opening the story
           if (mapInstanceRef.current) {
