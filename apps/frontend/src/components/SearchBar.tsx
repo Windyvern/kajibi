@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, AtSign, MapPinned, Tags, FileText } from 'lucide-react';
 
 interface SearchBarProps {
   showFilters?: boolean;
@@ -14,6 +14,16 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
   const setField = (key: string, on: boolean) => {
     const list = new Set((sf || '').split(',').filter(Boolean));
     if (on) list.add(key); else list.delete(key);
+    const next = new URLSearchParams(params);
+    const val = Array.from(list).join(',');
+    if (val) next.set('sf', val); else next.delete('sf');
+    setParams(next, { replace: true });
+  };
+  const setFields = (keys: string[], on: boolean) => {
+    const list = new Set((sf || '').split(',').filter(Boolean));
+    keys.forEach(k => {
+      if (on) list.add(k); else list.delete(k);
+    });
     const next = new URLSearchParams(params);
     const val = Array.from(list).join(',');
     if (val) next.set('sf', val); else next.delete('sf');
@@ -49,7 +59,7 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
           onChange={onChange}
           onKeyDown={onKeyDown}
           placeholder={"Nom du lieu, ville, plat, @instagram..."}
-          className="w-full h-12 rounded-full border bg-white/90 backdrop-blur px-5 text-sm shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full h-12 rounded-full border bg-white/90 backdrop-blur px-5 text-sm shadow-md focus:outline-none focus:ring-2 ring-brand"
         />
         <button
           aria-label="Afficher les options de recherche"
@@ -61,22 +71,63 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
       </div>
       {showFilters && (
         <div className="mt-2 flex justify-center">
+          {/* Mobile filters: compact with icons, fused Nom/@Insta, no checkmarks */}
           <div className="flex flex-wrap gap-2">
-            {[
-              { k: 't', label: 'Nom' },
-              { k: 'u', label: '@Instagram' },
-              { k: 'a', label: 'Adresse' },
-              { k: 'd', label: 'Mots-clés' },
-              { k: 'i', label: 'Contenu' },
-            ].map(({k,label}) => (
-              <button
-                key={k}
-                onClick={() => setField(k, !has(k))}
-                className={`px-3 py-1 rounded-full text-xs transition ${has(k) ? 'bg-blue-600 text-white' : 'bg-white/80 text-gray-600 border'}`}
-              >
-                {has(k) ? `✔︎ ${label}` : label}
-              </button>
-            ))}
+            {/* Nom + @Insta fused */}
+            {(() => {
+              const enabled = has('t') && has('u');
+              return (
+                <button
+                  key="tu"
+                  onClick={() => setFields(['t','u'], !enabled)}
+                  className={`px-3 py-1.5 rounded-full text-xs flex items-center gap-1 transition ${enabled ? 'bg-brand text-white border' : 'bg-white/80 text-gray-700 border opacity-70 backdrop-blur-sm'}`}
+                >
+                  <AtSign size={14} /> <span>Nom</span>
+                </button>
+              );
+            })()}
+
+            {/* Adresse -> Lieu */}
+            {(() => {
+              const k = 'a'; const enabled = has(k);
+              return (
+                <button
+                  key={k}
+                  onClick={() => setField(k, !enabled)}
+                  className={`px-3 py-1.5 rounded-full text-xs flex items-center gap-1 transition ${enabled ? 'bg-brand text-white border' : 'bg-white/80 text-gray-700 border opacity-70 backdrop-blur-sm'}`}
+                >
+                  <MapPinned size={14} /> <span>Lieu</span>
+                </button>
+              );
+            })()}
+
+            {/* Mots-clés -> Tags */}
+            {(() => {
+              const k = 'd'; const enabled = has(k);
+              return (
+                <button
+                  key={k}
+                  onClick={() => setField(k, !enabled)}
+                  className={`px-3 py-1.5 rounded-full text-xs flex items-center gap-1 transition ${enabled ? 'bg-brand text-white border' : 'bg-white/80 text-gray-700 border opacity-70 backdrop-blur-sm'}`}
+                >
+                  <Tags size={14} /> <span>Tags</span>
+                </button>
+              );
+            })()}
+
+            {/* Contenu */}
+            {(() => {
+              const k = 'i'; const enabled = has(k);
+              return (
+                <button
+                  key={k}
+                  onClick={() => setField(k, !enabled)}
+                  className={`px-3 py-1.5 rounded-full text-xs flex items-center gap-1 transition ${enabled ? 'bg-brand text-white border' : 'bg-white/80 text-gray-700 border opacity-70 backdrop-blur-sm'}`}
+                >
+                  <FileText size={14} /> <span>Contenu</span>
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}

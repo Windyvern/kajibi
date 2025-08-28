@@ -35,6 +35,8 @@ All colors MUST be HSL.
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
+    /* Brand accent color (HSL) — change once to update UI */
+    --brand: 40 69% 58%; /* #dead4b */
 
     --radius: 0.5rem;
 
@@ -102,4 +104,11 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+}
+
+
+/* Utilities for brand color */
+@layer utilities {
+  .bg-brand { background-color: hsl(var(--brand)); }
+  .ring-brand { --tw-ring-color: hsl(var(--brand)); }
 }

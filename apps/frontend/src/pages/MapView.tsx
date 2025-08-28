@@ -317,7 +317,6 @@ const MapView = () => {
             viewToggleMode="route"
             showFilters={filtersOpen}
             onToggleFilters={() => setFiltersOpen(o => !o)}
-            listsButtonVariant="default"
             leftSlot={(
               <div className="flex flex-col items-start gap-1">
                 <Button
@@ -505,7 +504,6 @@ const MapView = () => {
                   try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                 }}
                 fitBounds={fitToBounds}
-                  fitBounds={fitToBounds}
                 fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
@@ -531,7 +529,6 @@ const MapView = () => {
                         try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                       }}
                       fitBounds={fitToBounds}
-                      clusterAnimate={clusterAnim}
                       clusterAnimate={clusterAnim}
                       centerOffsetPixels={{ x: 0, y: -95 }}
                     />
@@ -607,7 +604,6 @@ const MapView = () => {
                   try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                 }}
                 fitBounds={fitToBounds}
-                  fitBounds={fitToBounds}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
               />

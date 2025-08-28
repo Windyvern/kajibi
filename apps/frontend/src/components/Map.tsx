@@ -378,8 +378,8 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         box-shadow: 0 6px 20px rgba(0,0,0,0.3);
       }
       .marker-frame.selected {
-        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-        border: 2px solid #3b82f6;
+        box-shadow: 0 6px 20px hsl(var(--brand) / 0.4);
+        border: 2px solid hsl(var(--brand));
       }
       .marker-frame img {
         display: block;
@@ -413,8 +413,8 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         border-top: 10px solid #fff;
       }
       .marker-container .marker-frame.selected + .arrow {
-        border-top-color: #3b82f6;
-        filter: drop-shadow(0 6px 20px rgba(59, 130, 246, 0.4));
+        border-top-color: hsl(var(--brand));
+        filter: drop-shadow(0 6px 20px hsl(var(--brand) / 0.4));
       }
       .cluster-counter {
         position: absolute;
