@@ -45,18 +45,18 @@ const ListsPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background mt-12">
       {/* Header with centered search and right nav (desktop), stacked on mobile */}
-      <div className="px-4 md:px-6 pt-4">
-        <SearchHeader routeBase="/lists" viewToggleMode="route" showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o=>!o)} />
+      <div className="fixed top-3 left-3 right-3 z-[10000]">
+        <SearchHeader viewToggleMode="route" showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o=>!o)} />
       </div>
 
       {!isMap && (
       <div className="p-6">
-        <div className="w-full flex justify-center">
+        <div className="flex items-center justify-between">
           <h2 className="w-full xl:max-w-[1460px] mx-auto text-2xl font-bold mb-6 text-foreground">Listes</h2>
         </div>
-        <div className="w-full flex justify-center">
+        <div className="flex items-center justify-between">
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6 w-full xl:max-w-[1460px] mx-auto">
             {filteredLists.map((l) => (
               <Link key={l.id} to={`/lists/${encodeURIComponent(l.slug || l.id)}`} className="block group">
@@ -79,7 +79,7 @@ const ListsPage = () => {
       )}
 
       {isMap && (
-        <div className="h-[100svh] w-full">
+        <div className="flex h-screen w-full">
           {(() => {
             const allStories = stories || [];
             const pseudo = (lists || []).map((l) => {

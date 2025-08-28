@@ -2,11 +2,13 @@ import { useMemo } from 'react';
 import { useStories } from '@/hooks/useStories';
 import { SearchHeader } from '@/components/SearchHeader';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
 
 export default function MentionsIndexPage() {
   const { data: stories } = useStories();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const q = (params.get('q') || '').toLowerCase();
 
   const prizes = useMemo(() => {
@@ -24,10 +26,14 @@ export default function MentionsIndexPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-4 md:px-6 pt-4">
-        <SearchHeader routeBase="/mentions" />
+      <div className="fixed top-3 left-3 right-3 z-[11000]">
+        <SearchHeader 
+          viewToggleMode="route" 
+          showFilters={filtersOpen}
+          onToggleFilters={() => setFiltersOpen(o => !o)}
+          routeBase="/mentions" />
       </div>
-      <div className="p-6">
+      <div className="p-6 mt-[85px] md:mt-12">
         <h2 className="text-2xl font-bold mb-6 text-foreground">Mentions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {prizes.map(p => (

@@ -259,7 +259,7 @@ const GalleryPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background mt-12">
+    <div className="min-h-screen bg-background mt-[85px] md:mt-12">
       {/* Responsive header with padding around search */}
       <div className="fixed top-3 left-3 right-3 z-[11000]" data-lov-id="src/pages/Gallery.tsx:145:6">
         <SearchHeader

@@ -79,11 +79,11 @@ const MentionsPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-4 md:px-6 pt-4">
+      <div className="fixed top-3 left-3 right-3 z-[10000]">
         <SearchHeader viewToggleMode="query" />
       </div>
 
-      <div className="px-6">
+      <div className="px-6 mt-[85px] md:mt-12">
         <div className="flex items-start justify-between mb-4">
           <div className="flex flex-col gap-2">
             <button className="text-sm text-muted-foreground hover:text-foreground" onClick={() => navigate('/mentions')}>

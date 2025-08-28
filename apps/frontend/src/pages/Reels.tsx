@@ -18,6 +18,7 @@ export default function ReelsPage() {
   const { showClosed, clusterAnim } = useOptions();
   const [params] = useSearchParams();
   const q = params.get('q');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const parseMv = () => {
@@ -55,12 +56,15 @@ export default function ReelsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-4 md:px-6 pt-4">
-        <SearchHeader viewToggleMode="query" />
+      <div className="fixed top-3 left-3 right-3 z-[10000]">
+        <SearchHeader 
+          viewToggleMode="route" 
+          showFilters={filtersOpen}
+          onToggleFilters={() => setFiltersOpen(o => !o)}/>
       </div>
 
       {isMap && (
-        <div className="relative h-full w-full">
+        <div className="flex h-screen w-full">
           <Map
             stories={visible.filter(s => s.geo)}
             onStorySelect={(story) => {
@@ -82,7 +86,7 @@ export default function ReelsPage() {
       )}
 
       {!isMap && (
-      <div className="p-6">
+      <div className="mt-[85px] md:mt-12 p-6">
         <h2 className="text-2xl font-bold mb-4">Reels récents</h2>
         <div className="grid grid-cols-1 [@media(min-width:800px)]:grid-cols-3 xl:grid-cols-4 gap-6 w-full xl:max-w-[1460px] mx-auto">
           {visible.map((story) => (
