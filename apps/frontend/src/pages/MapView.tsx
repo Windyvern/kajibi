@@ -226,18 +226,14 @@ const MapView = () => {
     }
   }, [params.get('fit')]);
 
-  // Recenter map whenever a new story is selected (if it has geo), unless an mv param is present
+  // Recenter map whenever a new story is selected (ensure focus on its marker)
   useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const hasMv = !!sp.get('mv');
-      if (!hasMv && selectedStory?.geo) {
-        setMapView({ center: selectedStory.geo, zoom: 16 });
-      }
-    } catch {
-      if (selectedStory?.geo) setMapView({ center: selectedStory.geo, zoom: 16 });
+    if (selectedStory?.geo) {
+      const c = selectedStory.geo;
+      setMapView({ center: c, zoom: 16 });
+      try { writeMv(c, 16); } catch {}
     }
-  }, [selectedStory?.id]);
+  }, [selectedStory?.id])
 
   // When mv param changes, always refresh the map view to mv
   useEffect(() => {

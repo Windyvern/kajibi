@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
+import LiquidGlass from '@/components/LiquidGlass';
 import { ChevronDown, ChevronUp, AtSign, MapPinned, Tags, FileText } from 'lucide-react';
 
 interface SearchBarProps {
@@ -53,22 +54,23 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
 
   return (
     <div className={className || ''}>
-      <div className="flex items-center gap-2">
-        <input
-          value={q}
-          onChange={onChange}
-          onKeyDown={onKeyDown}
-          placeholder={"Nom du lieu, ville, plat, @instagram..."}
-          className="w-full h-12 rounded-full border bg-white/90 backdrop-blur px-5 text-sm shadow-md focus:outline-none focus:ring-2 ring-brand"
-        />
-        <button
-          aria-label="Afficher les options de recherche"
-          onClick={onToggleFilters}
-          className="shrink-0 h-12 w-12 rounded-full bg-white/90 border shadow-md flex items-center justify-center"
-        >
-          {showFilters ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-      </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={q}
+            onChange={onChange}
+            onKeyDown={onKeyDown}
+            placeholder={"Nom du lieu, ville, plat, @instagram..."}
+            className="w-full h-12 rounded-full border bg-white/90 backdrop-blur px-5 text-sm shadow-md focus:outline-none focus:ring-2 ring-brand"
+          />
+          <button
+            aria-label="Afficher les options de recherche"
+            onClick={onToggleFilters}
+            className="shrink-0 h-12 w-12 rounded-full bg-white/90 border shadow-md flex items-center justify-center"
+          >
+            {showFilters ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+        </div>
+
       {showFilters && (
         <div className="mt-2 flex justify-center">
           {/* Mobile filters: compact with icons, fused Nom/@Insta, no checkmarks */}
@@ -80,7 +82,7 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
                 <button
                   key="tu"
                   onClick={() => setFields(['t','u'], !enabled)}
-                  className={`px-3 py-1.5 rounded-full text-xs flex items-center gap-1 transition ${enabled ? 'bg-brand text-white border' : 'bg-white/80 text-gray-700 border opacity-70 backdrop-blur-sm'}`}
+                  className={`px-3 py-1.5 rounded-full text-xs flex items-center gap-1 transition backdrop-blur ${enabled ? 'bg-brand text-white border' : 'bg-white/80 text-gray-700 border opacity-70 backdrop-blur-sm'}`}
                 >
                   <AtSign size={14} /> <span>Nom</span>
                 </button>

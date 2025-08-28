@@ -114,6 +114,30 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
   // Track last stories signature to avoid unnecessary marker rebuilds
   const lastStoriesSigRef = useRef<string | null>(null);
+  // Reflect selection changes without rebuilding all markers
+  useEffect(() => {
+    const group: any = markersRef.current as any;
+    if (!group) return;
+    try {
+      const layers: any[] = group.getLayers ? group.getLayers() : [];
+      layers.forEach((layer: any) => {
+        try {
+          const el: HTMLElement | null = layer.getElement?.() || null;
+          if (!el) return;
+          const frame = el.querySelector('.marker-frame') as HTMLElement | null;
+          const sid = frame?.getAttribute('data-story-id');
+          const isSel = !!sid && !!selectedStoryId && sid === selectedStoryId;
+          if (frame) {
+            if (isSel) frame.classList.add('selected'); else frame.classList.remove('selected');
+          }
+          if (typeof layer.setZIndexOffset === 'function') {
+            layer.setZIndexOffset(isSel ? 1000 : 0);
+          }
+        } catch {}
+      });
+    } catch {}
+  }, [selectedStoryId])
+
   // Keep latest onStorySelect without retriggering marker rebuilds
   const onStorySelectRef = useRef(onStorySelect);
   useEffect(() => { onStorySelectRef.current = onStorySelect; }, [onStorySelect]);

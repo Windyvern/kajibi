@@ -10,29 +10,18 @@ function sanitizePopulate(q: any) {
   const safeDefault = { media: true, articles: safeArticles } as const;
 
   const query = q || {};
-  const p = query.populate;
-
-  // If caller requested broad populate ("*" or missing), enforce safe defaults
-  if (!p || p === '*' || p === true || p === 'deep') {
-    query.populate = { ...safeDefault } as any;
-    return query;
-  }
-
-  // If articles is present, clamp it to safe fields only (no back-populate of posts/reels)
+  // Force a safe shape regardless of incoming params
+  (query as any).fields = ['id','caption','taken_at','createdAt','updatedAt','username','latitude','longitude','address','slug'];
+  (query as any).populate = { ...safeDefault } as any;
+  // Cap pagination (avoid exceeding Strapi's default max pageSize)
   try {
-    if (typeof p === 'object') {
-      query.populate = { ...p };
-      query.populate.media = true;
-      if ('articles' in p) {
-        query.populate.articles = { ...safeArticles } as any;
-      }
-    } else {
-      // Unknown format: fall back to safe defaults
-      query.populate = { ...safeDefault } as any;
-    }
-  } catch {
-    query.populate = { ...safeDefault } as any;
-  }
+    const inPag = (query as any).pagination || {};
+    const pageSizeRaw = Number(inPag.pageSize || 100);
+    const pageSize = Math.max(1, Math.min(100, isNaN(pageSizeRaw) ? 100 : pageSizeRaw));
+    (query as any).pagination = { ...inPag, pageSize };
+  } catch {}
+  // Prevent accidental deep populate through unknown keys
+  delete (query as any).filters;
   return query;
 }
 
