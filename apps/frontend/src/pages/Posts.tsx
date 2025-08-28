@@ -59,7 +59,7 @@ export default function PostsPage() {
     <div className="min-h-screen bg-background">
       <div className="fixed top-3 left-3 right-3 z-[10000]">
         <SearchHeader 
-          viewToggleMode="route" 
+          viewToggleMode="query" 
           showFilters={filtersOpen}
           onToggleFilters={() => setFiltersOpen(o => !o)}/>
       </div>

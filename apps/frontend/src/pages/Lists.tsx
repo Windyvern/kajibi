@@ -45,14 +45,14 @@ const ListsPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background mt-12">
+    <div className="min-h-screen bg-background">
       {/* Header with centered search and right nav (desktop), stacked on mobile */}
       <div className="fixed top-3 left-3 right-3 z-[10000]">
-        <SearchHeader viewToggleMode="route" showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o=>!o)} />
+        <SearchHeader viewToggleMode="query" showFilters={filtersOpen} onToggleFilters={() => setFiltersOpen(o=>!o)} />
       </div>
 
       {!isMap && (
-      <div className="p-6">
+      <div className="p-6 mt-12">
         <div className="flex items-center justify-between">
           <h2 className="w-full xl:max-w-[1460px] mx-auto text-2xl font-bold mb-6 text-foreground">Listes</h2>
         </div>

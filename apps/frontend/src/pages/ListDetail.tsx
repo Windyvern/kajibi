@@ -120,9 +120,6 @@ const ListDetailPage = () => {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <div className="px-6 pt-4">
-        <div className="flex items-center gap-4 mb-4">
-          <button onClick={() => navigate('/lists')} className="text-sm text-gray-600 hover:text-gray-800">← Listes</button>
-        </div>
         <div className="flex items-start gap-2 mb-2">
           <div className="flex-1" />
           <h1 className="text-2xl font-bold text-foreground text-center">{list.name}</h1>
@@ -139,9 +136,12 @@ const ListDetailPage = () => {
       {listType === 'media' ? (
         // MEDIA LISTS: map left; right shows gallery or unified viewer across all media
         <div className="flex-1 w-full">
-          <div className="grid w-full h-[calc(100svh-160px)] bg-white" style={{ gridTemplateColumns: '1fr 56.25vh' }}>
+          <div className="grid w-full h-full bg-white" style={{ gridTemplateColumns: '1fr 56.25vh' }}>
             {/* Left: Map */}
             <div className="min-w-0">
+                      <div className="flex items-center gap-4 mb-4">
+          <button onClick={() => navigate('/lists')} className="text-sm text-gray-600 hover:text-gray-800">← Listes</button>
+        </div>
               <Map
                 stories={mediaStories}
                 onStorySelect={(s) => {
