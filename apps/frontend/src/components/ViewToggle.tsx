@@ -22,17 +22,19 @@ export function ViewToggle({ mode = 'route', showLabels = true, routeBase = '/st
         }
       } catch {}
       if (target === 'map') {
-        if (!next.get('mv')) {
-          try {
-            const cRaw = sessionStorage.getItem('view:map:center');
-            const zRaw = sessionStorage.getItem('view:map:zoom');
-            if (cRaw && zRaw) {
-              const c = JSON.parse(cRaw) as { lat: number; lng: number };
-              const z = parseInt(zRaw, 10);
-              if (c && !Number.isNaN(z)) next.set('mv', `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(z)}`);
-            }
-          } catch {}
-        }
+        // Always prefer the latest map view from session when returning to map
+        try {
+          const cRaw = sessionStorage.getItem('view:map:center');
+          const zRaw = sessionStorage.getItem('view:map:zoom');
+          if (cRaw && zRaw) {
+            const c = JSON.parse(cRaw) as { lat: number; lng: number };
+            const z = parseInt(zRaw, 10);
+            if (c && !Number.isNaN(z)) next.set('mv', `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(z)}`);
+          }
+        } catch {}
+        // Ensure we land on the plain map, not a specific story viewer
+        next.delete('story');
+        next.delete('panel');
         next.set('style', 'map');
       } else {
         next.delete('style');

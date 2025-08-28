@@ -66,7 +66,11 @@ export function SearchHeader({
     switch (label) {
       case 'Stories': {
         const search = new URLSearchParams(location.search);
-        if (mv && !search.get('mv')) search.set('mv', mv);
+        // Always prefer the latest map view from session/url when going to Stories map
+        if (mv) search.set('mv', mv);
+        // Ensure we land on the plain map, not a specific story viewer
+        search.delete('story');
+        search.delete('panel');
         search.set('style','map');
         navigate({ pathname: '/stories', search: `?${search.toString()}` });
         break;

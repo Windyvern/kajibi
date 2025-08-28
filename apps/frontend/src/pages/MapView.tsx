@@ -138,8 +138,15 @@ const MapView = () => {
     newUrl.searchParams.set('story', slug);
     if (pid) newUrl.searchParams.set('panel', pid);
     else newUrl.searchParams.delete('panel');
-    // Push a new history entry so the browser back button closes the viewer
-    try { window.history.pushState({}, '', newUrl.toString()); } catch { window.history.replaceState({}, '', newUrl.toString()); }
+    // Insert a base state (same page without viewer) before pushing the viewer state,
+    // so a single back-swipe closes the viewer instead of navigating away
+    try {
+      const base = new URL(window.location.href);
+      base.searchParams.delete('story');
+      base.searchParams.delete('panel');
+      window.history.pushState({ viewer: 'base' }, '', base.toString());
+      window.history.pushState({ viewer: 'story' }, '', newUrl.toString());
+    } catch {}
 
     // Center and zoom the map to the story pin only when not triggered by a marker click
     if (story.geo && (!meta || meta.source !== 'marker')) {
@@ -177,6 +184,24 @@ const MapView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.get('story')]);
 
+  // Intercept back-swipe/popstate: when a story is open, close it instead of leaving the page
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      if (selectedStory) {
+        handleCloseStory();
+        // Ensure URL has no story/panel query after closing
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('story');
+          url.searchParams.delete('panel');
+          window.history.replaceState({}, '', url.toString());
+        } catch {}
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [selectedStory]);
+
   // Close with Escape key when a story is open
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -205,6 +230,7 @@ const MapView = () => {
   }
 
   // Center/zoom on strong match only for sufficiently specific queries (>=3 chars)
+  // This runs as the user types, without requiring Enter
   useEffect(() => {
     if (!q || q.length < 3 || !strongMatchStoryId) return;
     const st = (stories || []).find(s => s.id === strongMatchStoryId);

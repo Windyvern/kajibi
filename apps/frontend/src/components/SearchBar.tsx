@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import LiquidGlass from '@/components/LiquidGlass';
 import { ChevronDown, ChevronUp, AtSign, MapPinned, Tags, FileText } from 'lucide-react';
@@ -12,6 +13,7 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
   const [params, setParams] = useSearchParams();
   const q = params.get('q') || '';
   const sf = params.get('sf') || 't,u,a,d,i';
+  const inputRef = useRef<HTMLInputElement>(null);
   const setField = (key: string, on: boolean) => {
     const list = new Set((sf || '').split(',').filter(Boolean));
     if (on) list.add(key); else list.delete(key);
@@ -41,14 +43,38 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
   const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
     if (e.key === 'Enter') {
       const next = new URLSearchParams(params);
-      next.set('fit', '1');
-      setParams(next, { replace: true });
-      // Remove the flag shortly after to avoid lingering
-      setTimeout(() => {
-        const clear = new URLSearchParams(next);
-        clear.delete('fit');
-        setParams(clear, { replace: true });
-      }, 100);
+      const term = (q || '').trim().toLowerCase();
+      // Predefined locations for map view centering
+      const presets: Record<string, { lat: number; lng: number; zoom: number }> = {
+        'paris': { lat: 48.8566, lng: 2.3522, zoom: 12 },
+        'tokyo': { lat: 35.6895, lng: 139.6917, zoom: 11 },
+        'japan': { lat: 36.2048, lng: 138.2529, zoom: 5 },
+        'france': { lat: 46.2276, lng: 2.2137, zoom: 5 },
+        'italie': { lat: 41.8719, lng: 12.5674, zoom: 5 },
+      };
+      const preset = presets[term];
+      if (preset) {
+        // Apply explicit map view center/zoom via mv param
+        next.set('mv', `${preset.lat.toFixed(5)},${preset.lng.toFixed(5)},${preset.zoom}`);
+        // Do not trigger generic fit flow when using a preset
+        next.delete('fit');
+        // Clear query text and reset filters to defaults
+        next.delete('q');
+        next.delete('sf');
+        setParams(next, { replace: true });
+        // Blur the input to close mobile virtual keyboard
+        try { inputRef.current?.blur(); } catch {}
+      } else {
+        // Generic flow: signal map view to fit visible results
+        next.set('fit', '1');
+        setParams(next, { replace: true });
+        // Remove the flag shortly after to avoid lingering
+        setTimeout(() => {
+          const clear = new URLSearchParams(next);
+          clear.delete('fit');
+          setParams(clear, { replace: true });
+        }, 100);
+      }
     }
   };
 
@@ -56,6 +82,7 @@ export const SearchBar = ({ showFilters, onToggleFilters, className }: SearchBar
     <div className={className || ''}>
         <div className="flex items-center gap-2">
           <input
+            ref={inputRef}
             value={q}
             onChange={onChange}
             onKeyDown={onKeyDown}

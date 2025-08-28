@@ -294,6 +294,12 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
     });
 
   mapInstanceRef.current.addLayer(markersRef.current);
+  // Suppress cluster clicks during one-finger double-tap-drag window (do not change native behavior otherwise)
+  markersRef.current.on('clusterclick', (a: any) => {
+    if (Date.now() < suppressClicksUntilRef.current) {
+      try { a.originalEvent?.preventDefault?.(); } catch {}
+    }
+  });
 
     // Apply custom padding when clicking clusters (override default focus)
     if (!useNativeClick) markersRef.current.on('clusterclick', (a: any) => {
@@ -597,6 +603,12 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       }
     });
     map.addLayer(markersRef.current);
+    // Suppress cluster clicks during one-finger double-tap-drag window (do not change native behavior otherwise)
+    markersRef.current.on('clusterclick', (a: any) => {
+      if (Date.now() < suppressClicksUntilRef.current) {
+        try { a.originalEvent?.preventDefault?.(); } catch {}
+      }
+    });
     // Force marker rebuild after group recreation (bypass signature short-circuit)
     try { lastStoriesSigRef.current = null; } catch {}
     // Rebind cluster click with custom padding after recreation

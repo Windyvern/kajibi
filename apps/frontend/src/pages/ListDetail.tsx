@@ -125,7 +125,7 @@ const ListDetailPage = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="px-6 mt-12">
+      <div className=" top-3 left-3 right-3 z-[10000] mt-12">
         <ListHeader></ListHeader>
         {list.description && (
           <p className="text-muted-foreground mb-4 text-center max-w-2xl mx-auto">{list.description}</p>
