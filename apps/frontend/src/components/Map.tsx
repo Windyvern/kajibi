@@ -85,7 +85,7 @@ L.Icon.Default.mergeOptions({
 
 interface MapProps {
   stories: Story[];
-  onStorySelect: (story: Story, meta?: { source?: 'marker' | 'cluster' | 'external' | string }) => void;
+  onStorySelect: (story: Story, meta?: { source?: 'marker' | 'cluster' | 'external' | string, prevCenter?: { lat: number; lng: number }, prevZoom?: number }) => void;
   selectedStoryId?: string;
   center?: { lat: number; lng: number };
   zoom?: number;
@@ -102,13 +102,15 @@ interface MapProps {
   centerOffsetPixels?: { x: number; y: number };
   clusterRadiusByZoom?: (zoom: number) => number;
   offsetExternalCenter?: boolean;
+  // When true, allow marker clicks to recenter/zoom even on mobile
+  recenterOnMarkerClickMobile?: boolean;
 }
 
 // Assets (avatar + instagram icon)
 // Use bundler-imported assets to ensure availability
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false, recenterOnMarkerClickMobile = false }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -137,6 +139,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       });
     } catch {}
   }, [selectedStoryId])
+
+  // When no story is selected, avoid stale re-centering targets
+  useEffect(() => {
+    if (!selectedStoryId) {
+      try { lastFocusedRef.current = null; } catch {}
+    }
+  }, [selectedStoryId]);
 
   // Keep latest onStorySelect without retriggering marker rebuilds
   const onStorySelectRef = useRef(onStorySelect);
@@ -198,7 +207,8 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
           const now = Date.now();
           const dx = Math.abs(t.clientX - lastTapXYRef.current.x);
           const dy = Math.abs(t.clientY - lastTapXYRef.current.y);
-          const within = (now - lastTapTSRef.current) < 450 && dx < 36 && dy < 36;
+          // Increase minimum time threshold to detect double-tap start (reduce accidental zooms)
+          const within = (now - lastTapTSRef.current) < 700 && dx < 36 && dy < 36;
           if (within) {
             // Likely double-tap starting: suppress single-clicks momentarily
             suppressClicksUntilRef.current = now + 800;
@@ -717,7 +727,17 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       
       marker.on('click', () => {
         if (Date.now() < suppressClicksUntilRef.current) return;
-        if (!suppressZoomOnMarkerClick) {
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        // Capture previous view before any recentering to allow callers to restore it
+        let prevCenter: { lat: number; lng: number } | undefined;
+        let prevZoom: number | undefined;
+        try {
+          const map = mapInstanceRef.current;
+          if (map) { const c = map.getCenter(); prevCenter = { lat: c.lat, lng: c.lng }; prevZoom = map.getZoom(); }
+        } catch {}
+        // Recenter/zoom on marker click unless suppressed.
+        // By default, mobile does not recenter; enable via recenterOnMarkerClickMobile.
+        if (!suppressZoomOnMarkerClick && (!isMobile || recenterOnMarkerClickMobile)) {
           // Center and zoom to street level before opening the story
           if (mapInstanceRef.current) {
             if (centerOffsetPixels) {
@@ -746,7 +766,7 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
             }
           }
         }
-        try { onStorySelectRef.current?.(story, { source: 'marker' }); } catch {}
+        try { onStorySelectRef.current?.(story, { source: 'marker', prevCenter, prevZoom }); } catch {}
       });
 
       // Remember target so we can re-center after layout changes
@@ -855,9 +875,11 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       ro = new ResizeObserver(() => {
         map.invalidateSize();
         // After size change, ensure last focused marker remains well positioned
+        // Only do this when a story is actually selected; otherwise it can cause
+        // an unexpected upward shift when returning to plain map view on mobile.
         try {
           const target = lastFocusedRef.current;
-          if (target) {
+          if (target && selectedStoryId) {
             const z = map.getZoom();
             const pt = map.project([target.lat, target.lng], z);
             const off = centerOffsetPixels || defaultCenterOffset.current;

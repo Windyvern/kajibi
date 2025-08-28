@@ -57,18 +57,19 @@ const ListsPage = () => {
           <h2 className="w-full xl:max-w-[1460px] mx-auto text-2xl font-bold mb-6 text-foreground">Listes</h2>
         </div>
         <div className="flex items-center justify-between">
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6 w-full xl:max-w-[1460px] mx-auto">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6 w-full xl:max-w-[1460px] mx-auto">
             {filteredLists.map((l) => (
               <Link key={l.id} to={`/lists/${encodeURIComponent(l.slug || l.id)}`} className="block group">
-                <div className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg">
-                  {l.thumbnail ? (
-                    <img src={l.thumbnail} alt={l.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gray-200" />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                    <h3 className="font-semibold text-lg mb-1 line-clamp-2">{l.name}</h3>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="relative aspect-square w-full rounded-full overflow-hidden shadow-md ring-1 ring-black/10">
+                    {l.thumbnail ? (
+                      <img src={l.thumbnail} alt={l.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200" />
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-sm font-medium text-foreground line-clamp-2 leading-tight">{l.name}</h3>
                   </div>
                 </div>
               </Link>

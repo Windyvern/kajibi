@@ -66,12 +66,13 @@ export function SearchHeader({
     switch (label) {
       case 'Stories': {
         const search = new URLSearchParams(location.search);
-        // Always prefer the latest map view from session/url when going to Stories map
+        // Carry latest map view so gallery sections and map mode remain in sync
         if (mv) search.set('mv', mv);
-        // Ensure we land on the plain map, not a specific story viewer
+        // Remove any deep-link to a specific story when switching sections
         search.delete('story');
         search.delete('panel');
-        search.set('style','map');
+        // Preserve current view mode: keep gallery if user was in gallery
+        if (wasMap) search.set('style', 'map'); else search.delete('style');
         navigate({ pathname: '/stories', search: `?${search.toString()}` });
         break;
       }

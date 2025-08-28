@@ -18,6 +18,10 @@ interface TwoPanelStoryViewerProps {
   hideMetadataPanel?: boolean;
   hideRightPanel?: boolean;
   onStoryChange?: (story: Story, index: number) => void;
+  // Gallery-only behavior: on mobile, advance to next/prev story via swipe and after last panel
+  advanceStoryOnMobile?: boolean;
+  // When advancing stories on mobile, treat the first group (e.g., in-bounds) as cyclic among itself
+  firstGroupCount?: number;
 }
 
 export const TwoPanelStoryViewer = ({ 
@@ -29,6 +33,8 @@ export const TwoPanelStoryViewer = ({
   hideMetadataPanel,
   hideRightPanel,
   onStoryChange,
+  advanceStoryOnMobile = false,
+  firstGroupCount,
 }: TwoPanelStoryViewerProps) => {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(() => {
     if (initialStoryId) {
@@ -109,22 +115,25 @@ export const TwoPanelStoryViewer = ({
     }
   ];
 
-  // Reset panel index when story changes externally
+  // Apply initialStoryId only when it changes (or stories list changes),
+  // so user-initiated navigation (swipes) doesn't get reverted.
+  const appliedInitialStoryIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (initialStoryId) {
-      const index = stories.findIndex(story => story.id === initialStoryId);
-      if (index >= 0 && index !== currentStoryIndex) {
-        setCurrentStoryIndex(index);
-        const story = stories[index];
-        if (initialPanelId) {
-          const idx = story.panels.findIndex(p => p.id === initialPanelId);
-          setCurrentPanelIndex(idx >= 0 ? idx : 0);
-        } else {
-          setCurrentPanelIndex(0);
-        }
+    if (!initialStoryId) return;
+    if (appliedInitialStoryIdRef.current === initialStoryId) return;
+    const index = stories.findIndex((s) => s.id === initialStoryId);
+    if (index >= 0) {
+      setCurrentStoryIndex(index);
+      const story = stories[index];
+      if (initialPanelId) {
+        const idx = story.panels.findIndex((p) => p.id === initialPanelId);
+        setCurrentPanelIndex(idx >= 0 ? idx : 0);
+      } else {
+        setCurrentPanelIndex(0);
       }
+      appliedInitialStoryIdRef.current = initialStoryId;
     }
-  }, [initialStoryId, initialPanelId, stories, currentStoryIndex]);
+  }, [initialStoryId, initialPanelId, stories]);
 
   // Ensure we jump to the requested panel only once per story selection
   const appliedInitialForStoryRef = useRef<string | null>(null);
@@ -139,6 +148,16 @@ export const TwoPanelStoryViewer = ({
       appliedInitialForStoryRef.current = story.id;
     }
   }, [initialPanelId, currentStoryIndex, stories]);
+
+  // Calculate responsive panel visibility based on window aspect ratio
+  const [windowAspectRatio, setWindowAspectRatio] = useState(window.innerWidth / window.innerHeight);
+  const [isMdUp, setIsMdUp] = useState(() => {
+    if (typeof window !== 'undefined' && 'matchMedia' in window) {
+      return window.matchMedia('(min-width: 768px)').matches;
+    }
+    return false;
+  });
+
 
   const goToNextPanel = useCallback(() => {
     if (currentPanelIndex < currentStory.panels.length - 1) {
@@ -163,6 +182,22 @@ export const TwoPanelStoryViewer = ({
       setCurrentPanelIndex(stories[currentStoryIndex - 1].panels.length - 1);
     }
   }, [currentStoryIndex, currentPanelIndex, stories]);
+
+  // Story-level navigation helpers
+  const goToNextStory = useCallback(() => {
+    if (currentStoryIndex < stories.length - 1) {
+      setCurrentStoryIndex((i) => i + 1);
+      setCurrentPanelIndex(0);
+    }
+  }, [currentStoryIndex, stories.length]);
+
+  const goToPreviousStory = useCallback(() => {
+    if (currentStoryIndex > 0) {
+      setCurrentStoryIndex((i) => i - 1);
+      // Jump to first panel for prior story by default
+      setCurrentPanelIndex(0);
+    }
+  }, [currentStoryIndex]);
 
   const goToNextHighlight = useCallback(() => {
     const currentIndex = mockHighlights.findIndex(h => h.id === selectedHighlightId);
@@ -246,8 +281,6 @@ export const TwoPanelStoryViewer = ({
   // Intentionally do not subscribe to global mute while the viewer is open;
   // the local toggle controls the global bus, not the other way around.
 
-  // (moved below isMdUp declaration)
-
   // Mobile swipe gesture support
   const mobileSwipeHandlers = useSwipeGestures({
     onSwipeUp: () => {
@@ -315,15 +348,6 @@ export const TwoPanelStoryViewer = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [goToNextPanel, goToPreviousPanel]);
 
-  // Calculate responsive panel visibility based on window aspect ratio
-  const [windowAspectRatio, setWindowAspectRatio] = useState(window.innerWidth / window.innerHeight);
-  const [isMdUp, setIsMdUp] = useState(() => {
-    if (typeof window !== 'undefined' && 'matchMedia' in window) {
-      return window.matchMedia('(min-width: 768px)').matches;
-    }
-    return false;
-  });
-  
   // Lock page scroll on mobile while the viewer is open
   useEffect(() => {
     if (isMdUp) return;

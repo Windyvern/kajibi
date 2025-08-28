@@ -37,6 +37,16 @@ export function ViewToggle({ mode = 'route', showLabels = true, routeBase = '/st
         next.delete('panel');
         next.set('style', 'map');
       } else {
+        // Going to gallery: carry the latest map view into URL as mv too
+        try {
+          const cRaw = sessionStorage.getItem('view:map:center');
+          const zRaw = sessionStorage.getItem('view:map:zoom');
+          if (cRaw && zRaw) {
+            const c = JSON.parse(cRaw) as { lat: number; lng: number };
+            const z = parseInt(zRaw, 10);
+            if (c && !Number.isNaN(z)) next.set('mv', `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${Math.round(z)}`);
+          }
+        } catch {}
         next.delete('style');
       }
       navigate({ pathname: routeBase, search: `?${next.toString()}` });

@@ -116,7 +116,48 @@ const MapView = () => {
   // Track viewport to trigger re-render on resize and switch layouts live
   const [viewport, setViewport] = useState({ w: window.innerWidth, h: window.innerHeight });
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Ensure body styles are normalized when landing on map view after viewer
+  useEffect(() => {
+    try {
+      const { body, documentElement } = document;
+      body.style.overflow = '';
+      documentElement.style.overflow = '';
+      body.style.position = '';
+      body.style.width = '';
+      (body.style as any).touchAction = '';
+    } catch {}
+  }, []);
   const { showClosed, clusterAnim } = useOptions();
+  // Build viewer order based on current bounds: in-bounds first, then recents
+  const getViewerStories = (arr: Story[]) => getPrioritizedStories(arr);
+
+  // Rotate a story array so selected appears first (stable order otherwise)
+  const withSelectedFirst = (arr: Story[], sel?: Story | null) => {
+    if (!sel) return arr;
+    const idx = arr.findIndex(s => s.id === sel.id);
+    if (idx > 0) return [...arr.slice(idx), ...arr.slice(0, idx)];
+    return arr;
+  };
+  // Build prioritized story ordering for viewer: in-bounds first (if zoom>=6), then recent
+  const getPrioritizedStories = (arr: Story[]) => {
+    try {
+      const lastZ = mapView.zoom;
+      const bRaw = sessionStorage.getItem('view:map:bounds');
+      if (bRaw && lastZ != null && lastZ >= 6) {
+        const b = JSON.parse(bRaw) as { north: number; south: number; east: number; west: number };
+        const withGeo = arr.filter(s => s.geo);
+        const inBounds: Story[] = [];
+        const outBounds: Story[] = [];
+        for (const s of withGeo) {
+          const g = s.geo!;
+          if (g.lat <= b.north && g.lat >= b.south && g.lng <= b.east && g.lng >= b.west) inBounds.push(s); else outBounds.push(s);
+        }
+        const outSorted = [...outBounds].sort((a,b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+        return [...inBounds, ...outSorted];
+      }
+    } catch {}
+    return arr;
+  };
   useEffect(() => {
     const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener('resize', onResize);
@@ -124,8 +165,10 @@ const MapView = () => {
   }, []);
   // Keep the initial FR-JP view; do not auto-refit
 
+  const lastSelectSourceRef = useRef<string | undefined>(undefined);
   const handleStorySelect = (story: Story, meta?: { source?: string }) => {
     setSelectedStory(story);
+    lastSelectSourceRef.current = meta?.source;
     // If coming from a search hit, prefer the matched panel; otherwise clear
     const pid = q ? matchedPanelByStory[story.id] : undefined;
     setSelectedPanelId(pid);
@@ -148,8 +191,9 @@ const MapView = () => {
       window.history.pushState({ viewer: 'story' }, '', newUrl.toString());
     } catch {}
 
-    // Center and zoom the map to the story pin only when not triggered by a marker click
-    if (story.geo && (!meta || meta.source !== 'marker')) {
+    // Center and zoom the map to the story pin only when triggered by a marker click on non-mobile
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    if (story.geo && meta?.source === 'marker' && !isMobile) {
       const view = { center: story.geo, zoom: 16 } as const;
       lastPinViewRef.current = view;
       setMapView(view);
@@ -252,9 +296,11 @@ const MapView = () => {
     }
   }, [params.get('fit')]);
 
-  // Recenter map whenever a new story is selected (ensure focus on its marker)
+  // Only recenter when selection came from a marker on non-mobile
   useEffect(() => {
-    if (selectedStory?.geo) {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    if (isMobile) return;
+    if (selectedStory?.geo && lastSelectSourceRef.current === 'marker') {
       const c = selectedStory.geo;
       setMapView({ center: c, zoom: 16 });
       try { writeMv(c, 16); } catch {}
@@ -288,8 +334,9 @@ const MapView = () => {
       if (found) {
         setSelectedStory(found);
         if (panel) setSelectedPanelId(panel);
-        // Center and zoom the map like a marker click
-        if (found.geo) setMapView({ center: found.geo, zoom: 16 });
+        // Do not recenter the map on mobile when opening from URL
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        if (!isMobile && found.geo) setMapView({ center: found.geo, zoom: 16 });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -332,7 +379,7 @@ const MapView = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Responsive Header: Zoom +/- (left), Search (center), Nav (right) */}
-      {!selectedStory && (
+      {!selectedStory && !params.get('story') && (
         <div className="fixed top-3 left-3 right-3 z-[10000]">
           <SearchHeader
             dataLovId="src/pages/MapView.tsx:231:8"
@@ -341,20 +388,6 @@ const MapView = () => {
             onToggleFilters={() => setFiltersOpen(o => !o)}
             leftSlot={(
               <div className="flex flex-col items-start gap-1">
-                <Button
-                  variant="default"
-                  className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
-                  onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom + 1)) }))}
-                >
-                  <Plus size={18} />
-                </Button>
-                <Button
-                  variant="default"
-                  className="bg-white text-gray-900 shadow-md h-12 w-12 p-0 rounded-full"
-                  onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
-                >
-                  <Minus size={18} />
-                </Button>
               </div>
             )}
           />
@@ -362,17 +395,19 @@ const MapView = () => {
       )}
       {/* Mobile Layout (rendered conditionally to avoid double-mount) */}
       {viewport.w < 768 && (
-        selectedStory ? (
+        (selectedStory || params.get('story')) ? (
           <div className="relative min-h-screen">
-            <TwoPanelStoryViewer 
-              initialStoryId={selectedStory.id}
-              initialPanelId={selectedPanelId}
-              stories={stories}
-              onClose={handleCloseStory}
-            />
+            {selectedStory && (
+              <TwoPanelStoryViewer 
+                initialStoryId={selectedStory.id}
+                initialPanelId={selectedPanelId}
+                stories={stories}
+                onClose={handleCloseStory}
+              />
+            )}
           </div>
         ) : (
-          <div className="relative h-[100svh]">
+          <div className="relative h-[100dvh]">
             {showMobileList ? (
               <div className="h-full overflow-y-auto bg-white p-4">
                 <h2 className="text-xl font-bold mb-4">Stories</h2>
@@ -410,10 +445,30 @@ const MapView = () => {
                   center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                   zoom={mapView.zoom}
                   onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
+                  onBoundsChange={(b) => {
+                    try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
+                  }}
                   fitPadding={40}
                   clusterAnimate={clusterAnim}
                   centerOffsetPixels={{ x: 0, y: -60 }}
                 />
+                {/* Mobile-only zoom controls: bottom-right vertical + / - */}
+                <div className="pointer-events-none absolute bottom-4 right-3 flex flex-col gap-2 mb-4 z-[12000]">
+                  <button
+                    onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom + 1)) }))}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-white shadow-md border border-black/10 flex items-center justify-center"
+                    aria-label="Zoom in"
+                  >
+                    <Plus size={18} />
+                  </button>
+                  <button
+                    onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-white shadow-md border border-black/10 flex items-center justify-center"
+                    aria-label="Zoom out"
+                  >
+                    <Minus size={18} />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -436,7 +491,7 @@ const MapView = () => {
                   selectedStoryId={selectedStory?.id}
                   center={{ lat:  mapView.center.lat, lng: mapView.center.lng }}
                   zoom={mapView.zoom}
-                  onViewChange={(c, z) => setMapView({ center: c, zoom: z })}
+                  onViewChange={(c, z) => { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
                   onBoundsChange={(b) => {
                     try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
                   }}
@@ -530,6 +585,23 @@ const MapView = () => {
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
               />
+                {/* Zoom controls: bottom-right vertical + / - */}
+                <div className="pointer-events-none absolute bottom-4 right-3 flex flex-col gap-2 mb-4 z-[12000]">
+                  <button
+                    onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom + 1)) }))}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-white shadow-md border border-black/10 flex items-center justify-center"
+                    aria-label="Zoom in"
+                  >
+                    <Plus size={18} />
+                  </button>
+                  <button
+                    onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-white shadow-md border border-black/10 flex items-center justify-center"
+                    aria-label="Zoom out"
+                  >
+                    <Minus size={18} />
+                  </button>
+                </div>
             </div>
           )
         ) : (
@@ -629,6 +701,23 @@ const MapView = () => {
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
               />
+                {/* Zoom controls: bottom-right vertical + / - */}
+                <div className="pointer-events-none absolute bottom-4 right-3 flex flex-col gap-2 mb-4 z-[12000]">
+                  <button
+                    onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom + 1)) }))}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-white shadow-md border border-black/10 flex items-center justify-center"
+                    aria-label="Zoom in"
+                  >
+                    <Plus size={18} />
+                  </button>
+                  <button
+                    onClick={() => setMapView(v => ({ ...v, zoom: Math.max(3, Math.min(19, v.zoom - 1)) }))}
+                    className="pointer-events-auto h-12 w-12 rounded-full bg-white shadow-md border border-black/10 flex items-center justify-center"
+                    aria-label="Zoom out"
+                  >
+                    <Minus size={18} />
+                  </button>
+                </div>
             </div>
           )
         )}
