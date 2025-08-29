@@ -7,7 +7,9 @@ import { StoryGalleryOverlay } from "./StoryGalleryOverlay";
 import { StoryMetadata } from "./StoryMetadata";
 import { Story } from "@/types/story";
 import { useSwipeGestures } from "@/hooks/useSwipeGestures";
+import { useSwipeAnimation } from "@/hooks/useSwipeAnimation";
 import { getMute, setMute } from "@/lib/muteBus";
+import { animated } from 'react-spring';
 
 interface TwoPanelStoryViewerProps {
   initialStoryId?: string;
@@ -162,15 +164,47 @@ export const TwoPanelStoryViewer = ({
   const goToNextPanel = useCallback(() => {
     if (currentPanelIndex < currentStory.panels.length - 1) {
       setCurrentPanelIndex(prev => prev + 1);
-    } else if (currentStoryIndex < stories.length - 1) {
-      setCurrentStoryIndex(prev => prev + 1);
-      setCurrentPanelIndex(0);
     } else {
-      // Loop back to beginning
-      setCurrentStoryIndex(0);
-      setCurrentPanelIndex(0);
+      // End of current story - determine behavior based on context
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      const shouldAdvanceStory = advanceStoryOnMobile && isMobile;
+      
+      console.log('goToNextPanel: End of story reached', {
+        advanceStoryOnMobile,
+        isMobile,
+        shouldAdvanceStory,
+        currentStoryIndex,
+        storiesLength: stories.length
+      });
+      
+      if (shouldAdvanceStory) {
+        // Mobile gallery mode: advance to next story
+        console.log('Advancing to next story (mobile gallery mode)');
+        if (currentStoryIndex < stories.length - 1) {
+          setCurrentStoryIndex(prev => prev + 1);
+          setCurrentPanelIndex(0);
+        } else {
+          // Handle cycling within sections
+          if (firstGroupCount && firstGroupCount > 0) {
+            // We're past the end, cycle back to first story in "Stories récentes"
+            const firstRecentIndex = firstGroupCount;
+            if (firstRecentIndex < stories.length) {
+              setCurrentStoryIndex(firstRecentIndex);
+              setCurrentPanelIndex(0);
+            }
+          } else {
+            // Simple loop back to beginning
+            setCurrentStoryIndex(0);
+            setCurrentPanelIndex(0);
+          }
+        }
+      } else {
+        // Map view or desktop: just loop within current story
+        console.log('Looping within current story (map view or desktop)');
+        setCurrentPanelIndex(0);
+      }
     }
-  }, [currentStoryIndex, currentPanelIndex, currentStory, stories.length]);
+  }, [currentStoryIndex, currentPanelIndex, currentStory, stories.length, advanceStoryOnMobile, firstGroupCount]);
   // Keep a stable ref to the latest next handler without retriggering effects
   nextRef.current = goToNextPanel;
 
@@ -182,6 +216,67 @@ export const TwoPanelStoryViewer = ({
       setCurrentPanelIndex(stories[currentStoryIndex - 1].panels.length - 1);
     }
   }, [currentStoryIndex, currentPanelIndex, stories]);
+
+  // Story-level navigation helpers for mobile swipe (gallery mode only)
+  const goToNextStoryMobileSwipe = useCallback(() => {
+    console.log('goToNextStoryMobileSwipe called - gallery mode story advancement');
+    
+    // Mobile gallery mode: advance to next story
+    if (currentStoryIndex < stories.length - 1) {
+      setCurrentStoryIndex(prev => prev + 1);
+      setCurrentPanelIndex(0);
+    } else {
+      // Handle cycling: go to next section or loop
+      if (firstGroupCount && firstGroupCount > 0) {
+        // If we're in first group, go to start of second group
+        if (currentStoryIndex < firstGroupCount - 1) {
+          setCurrentStoryIndex(prev => prev + 1);
+        } else if (currentStoryIndex === firstGroupCount - 1) {
+          // End of first group, go to first story in second group
+          if (firstGroupCount < stories.length) {
+            setCurrentStoryIndex(firstGroupCount);
+          } else {
+            setCurrentStoryIndex(0); // fallback
+          }
+        } else {
+          // We're in second group, go to next or loop to start of second group
+          if (currentStoryIndex < stories.length - 1) {
+            setCurrentStoryIndex(prev => prev + 1);
+          } else {
+            setCurrentStoryIndex(firstGroupCount); // loop to start of second group
+          }
+        }
+      } else {
+        // Simple loop back to beginning
+        setCurrentStoryIndex(0);
+      }
+      setCurrentPanelIndex(0);
+    }
+  }, [currentStoryIndex, stories.length, firstGroupCount]);
+
+  const goToPreviousStoryMobileSwipe = useCallback(() => {
+    console.log('goToPreviousStoryMobileSwipe called - gallery mode story advancement');
+    
+    // Mobile gallery mode: go to previous story
+    if (currentStoryIndex > 0) {
+      setCurrentStoryIndex(prev => prev - 1);
+      setCurrentPanelIndex(0);
+    } else {
+      // Handle cycling: go to previous section or wrap
+      if (firstGroupCount && firstGroupCount > 0) {
+        // We're at start of first group, wrap to end of second group
+        if (stories.length > firstGroupCount) {
+          setCurrentStoryIndex(stories.length - 1);
+        } else {
+          setCurrentStoryIndex(firstGroupCount - 1); // fallback
+        }
+      } else {
+        // Simple wrap to end
+        setCurrentStoryIndex(stories.length - 1);
+      }
+      setCurrentPanelIndex(0);
+    }
+  }, [currentStoryIndex, stories.length, firstGroupCount]);
 
   // Story-level navigation helpers
   const goToNextStory = useCallback(() => {
@@ -281,8 +376,8 @@ export const TwoPanelStoryViewer = ({
   // Intentionally do not subscribe to global mute while the viewer is open;
   // the local toggle controls the global bus, not the other way around.
 
-  // Mobile swipe gesture support
-  const mobileSwipeHandlers = useSwipeGestures({
+  // Mobile swipe gesture support with animations
+  const mobileSwipeAnimation = useSwipeAnimation({
     onSwipeUp: () => {
       if (!showMetadataPanel && !selectedHighlightId) {
         setShowMetadataPanel(true);
@@ -296,24 +391,54 @@ export const TwoPanelStoryViewer = ({
       }
     },
     onSwipeLeft: () => {
+      // Swipe left = next article (user requirement)
       if (selectedHighlightId) {
-        goToPreviousHighlight();
+        goToNextHighlight();
       } else {
-        goToPreviousPanel();
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        const shouldAdvanceStory = advanceStoryOnMobile && isMobile;
+        
+        console.log('Mobile swipe left', {
+          advanceStoryOnMobile,
+          isMobile, 
+          shouldAdvanceStory
+        });
+        
+        if (shouldAdvanceStory) {
+          // Gallery mobile: story navigation
+          goToNextStoryMobileSwipe();
+        } else {
+          // Map view or desktop: panel navigation  
+          goToNextPanel();
+        }
       }
     },
     onSwipeRight: () => {
+      // Swipe right = previous article (user requirement)  
       if (selectedHighlightId) {
-        goToNextHighlight();
-      } else if (!selectedHighlightId && mockHighlights.length > 0) {
-        setSelectedHighlightId(mockHighlights[0].id);
+        goToPreviousHighlight();
       } else {
-        goToNextPanel();
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        const shouldAdvanceStory = advanceStoryOnMobile && isMobile;
+        
+        console.log('Mobile swipe right', {
+          advanceStoryOnMobile,
+          isMobile,
+          shouldAdvanceStory
+        });
+        
+        if (shouldAdvanceStory) {
+          // Gallery mobile: story navigation
+          goToPreviousStoryMobileSwipe();
+        } else {
+          // Map view or desktop: panel navigation
+          goToPreviousPanel();
+        }
       }
     },
   });
 
-  // Desktop swipe gesture support for story panel only
+  // Desktop swipe gesture support for story panel only (keep old system for desktop)
   const desktopSwipeHandlers = useSwipeGestures({
     onSwipeLeft: goToNextPanel,
     onSwipeRight: goToPreviousPanel,
@@ -493,30 +618,20 @@ export const TwoPanelStoryViewer = ({
     }
   };
 
-  // Compose swipe + pinch handlers so both work
-  const composedTouchStart: React.TouchEventHandler = (e) => {
-    try { mobileSwipeHandlers.onTouchStart?.(e as any); } catch {}
-    onTouchStartPinch(e);
-  };
-  const composedTouchMove: React.TouchEventHandler = (e) => {
-    try { mobileSwipeHandlers.onTouchMove?.(e as any); } catch {}
-    onTouchMovePinch(e);
-  };
-  const composedTouchEnd: React.TouchEventHandler = (e) => {
-    try { mobileSwipeHandlers.onTouchEnd?.(e as any); } catch {}
-  };
-
   const mobileLayout = (
-    <div 
+    <animated.div 
+      {...mobileSwipeAnimation.bind()}
       className="fixed inset-0 overflow-hidden"
-      style={{ height: '100svh', touchAction: 'none' }}
+      style={{ 
+        height: '100svh', 
+        touchAction: 'none',
+        x: mobileSwipeAnimation.style.x,
+        y: mobileSwipeAnimation.style.y,
+        rotateZ: mobileSwipeAnimation.style.rotateZ,
+        scale: mobileSwipeAnimation.style.scale,
+        opacity: mobileSwipeAnimation.style.opacity
+      }}
       ref={containerRef}
-      onTouchStart={composedTouchStart}
-      onTouchMove={composedTouchMove}
-      onTouchEnd={composedTouchEnd}
-      onMouseDown={mobileSwipeHandlers.onMouseDown as any}
-      onMouseMove={mobileSwipeHandlers.onMouseMove as any}
-      onMouseUp={mobileSwipeHandlers.onMouseUp as any}
       onWheel={(e) => {
         // Allow opening with either direction to match user expectation
         if (!showMetadataPanel && (e.deltaY < -30 || e.deltaY > 60)) setShowMetadataPanel(true);
@@ -672,7 +787,7 @@ export const TwoPanelStoryViewer = ({
           onClose={() => setShowGallery(false)}
         />
       )}
-    </div>
+    </animated.div>
   );
 
   const desktopLayout = (

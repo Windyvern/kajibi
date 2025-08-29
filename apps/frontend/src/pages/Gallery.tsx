@@ -41,6 +41,24 @@ const GalleryPage = () => {
     return null;
   };
   const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>(() => parseMv() || { center: { lat: 41.5, lng: 70 }, zoom: 3 });
+  
+  // State for triggering programmatic marker clicks to fix centering
+  const [shouldTriggerMarkerClick, setShouldTriggerMarkerClick] = useState(false);
+  const [markerClickStoryId, setMarkerClickStoryId] = useState<string | null>(null);
+
+  // Trigger marker click when story is selected from map marker (after navigation)
+  useEffect(() => {
+    if (selectedStory && selectedStory.geo && isMap && markerClickStoryId === selectedStory.id) {
+      // This story selection came from a marker click, so trigger centering
+      requestAnimationFrame(() => {
+        setShouldTriggerMarkerClick(true);
+        requestAnimationFrame(() => setShouldTriggerMarkerClick(false));
+      });
+      // Clear the marker click tracking
+      setMarkerClickStoryId(null);
+    }
+  }, [selectedStory?.id, isMap, markerClickStoryId]);
+  
   // Debounced mv writer to avoid spamming navigate during wheel zoom in map-in-gallery mode
   const mvTimerRef = useRef<number | null>(null);
   const prevMvRef = useRef<string | null>(null);
@@ -241,12 +259,37 @@ const GalleryPage = () => {
             stories={displayedStories.filter(s => s.geo)}
             onStorySelect={(story) => {
               const pid = q ? matchedPanelByStory[story.id] : undefined;
+              
+              // Track that this story was selected from a marker click
+              setMarkerClickStoryId(story.id);
+              
+              // Store ordered stories and context for swipe navigation
+              try {
+                const ordered: Story[] = sections
+                  ? [...(sections?.[0]?.stories || []), ...(sections?.[1]?.stories || [])]
+                  : displayedStories;
+                const ids = ordered.map(s => s.id);
+                sessionStorage.setItem('viewer:orderedIds', JSON.stringify(ids));
+                sessionStorage.setItem('viewer:context', 'map');
+                
+                // Store sections info for proper swipe order
+                if (sections && sections.length > 0) {
+                  sessionStorage.setItem('viewer:sections', JSON.stringify({
+                    firstGroupCount: sections[0]?.stories?.length || 0,
+                    sections: sections.map(s => ({ title: s.title, count: s.stories.length }))
+                  }));
+                } else {
+                  sessionStorage.removeItem('viewer:sections');
+                }
+              } catch {}
+              
               const next = new URLSearchParams(location.search);
               next.set('style', 'map');
               next.set('story', (story.handle || story.id));
               if (pid) next.set('panel', pid); else next.delete('panel');
               const from = params.get('from');
               if (from) next.set('from', from);
+              
               navigate({ pathname: location.pathname, search: `?${next.toString()}` });
             }}
             center={mapView.center}
@@ -262,6 +305,7 @@ const GalleryPage = () => {
             suppressZoomOnMarkerClick
             // Do not let gallery map mode overwrite global last map view while a story is open
             persistViewToSession={!selectedStory}
+            triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
           />
           {selectedStory && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[12000]">
@@ -295,7 +339,6 @@ const GalleryPage = () => {
           viewToggleMode="route"
           showFilters={filtersOpen}
           onToggleFilters={() => setFiltersOpen(o => !o)}
-          listsButtonVariant="outline"
         />
       </div>
 
@@ -326,14 +369,28 @@ const GalleryPage = () => {
           const current = `${location.pathname}${location.search}`;
           try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}
           const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+          
+          // Store ordered stories and context for swipe navigation
+          try {
+            const ordered: Story[] = sections
+              ? [...(sections?.[0]?.stories || []), ...(sections?.[1]?.stories || [])]
+              : displayedStories;
+            const ids = ordered.map(s => s.id);
+            sessionStorage.setItem('viewer:orderedIds', JSON.stringify(ids));
+            sessionStorage.setItem('viewer:context', 'gallery');
+            
+            // Store sections info for proper swipe order
+            if (sections && sections.length > 0) {
+              sessionStorage.setItem('viewer:sections', JSON.stringify({
+                firstGroupCount: sections[0]?.stories?.length || 0,
+                sections: sections.map(s => ({ title: s.title, count: s.stories.length }))
+              }));
+            } else {
+              sessionStorage.removeItem('viewer:sections');
+            }
+          } catch {}
+          
           if (story.geo && galleryMap && !isMobile) {
-            try {
-              const ordered: Story[] = sections
-                ? [...(sections?.[0]?.stories || []), ...(sections?.[1]?.stories || [])]
-                : displayedStories;
-              const ids = ordered.map(s => s.id);
-              sessionStorage.setItem('viewer:orderedIds', JSON.stringify(ids));
-            } catch {}
             const next = new URLSearchParams(location.search);
             next.set('style', 'map');
             next.set('story', (story.handle || story.id));

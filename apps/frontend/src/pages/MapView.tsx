@@ -27,6 +27,10 @@ const MapView = () => {
   const location = useLocation();
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [selectedPanelId, setSelectedPanelId] = useState<string | undefined>(undefined);
+  // Track when we want the Map component to apply marker centering offset
+  const [shouldOffsetExternalCenter, setShouldOffsetExternalCenter] = useState(false);
+  // Ref to trigger marker recentering after story selection from global map
+  const [shouldTriggerMarkerClick, setShouldTriggerMarkerClick] = useState(false);
   // Fit-to-results bounds (precise fit) when user presses Enter in search
   const [fitToBounds, setFitToBounds] = useState<[[number, number],[number, number]] | undefined>(undefined);
   useEffect(() => { setFitToBounds(undefined); }, [selectedStory?.id, q]);
@@ -194,9 +198,16 @@ const MapView = () => {
     // Center and zoom the map to the story pin only when triggered by a marker click on non-mobile
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
     if (story.geo && meta?.source === 'marker' && !isMobile) {
+      // Use original coordinates and let the Map component apply the marker offset
       const view = { center: story.geo, zoom: 16 } as const;
       lastPinViewRef.current = view;
       setMapView(view);
+      // Trigger a simulated marker click immediately after story selection
+      requestAnimationFrame(() => {
+        setShouldTriggerMarkerClick(true);
+        // Reset the trigger flag quickly
+        requestAnimationFrame(() => setShouldTriggerMarkerClick(false));
+      });
     }
   };
 
@@ -278,7 +289,12 @@ const MapView = () => {
   useEffect(() => {
     if (!q || q.length < 3 || !strongMatchStoryId) return;
     const st = (stories || []).find(s => s.id === strongMatchStoryId);
-    if (st?.geo) setMapView({ center: st.geo, zoom: 16 });
+    if (st?.geo) {
+      // Use original coordinates and let the Map component apply the marker offset
+      setMapView({ center: st.geo, zoom: 16 });
+      setShouldOffsetExternalCenter(true);
+      setTimeout(() => setShouldOffsetExternalCenter(false), 100);
+    }
   }, [q, strongMatchStoryId]);
 
   // Fit to results when user presses Enter and results are relatively few (<10)
@@ -301,9 +317,11 @@ const MapView = () => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
     if (isMobile) return;
     if (selectedStory?.geo && lastSelectSourceRef.current === 'marker') {
-      const c = selectedStory.geo;
-      setMapView({ center: c, zoom: 16 });
-      try { writeMv(c, 16); } catch {}
+      // Use original coordinates and let the Map component apply the marker offset
+      setMapView({ center: selectedStory.geo, zoom: 16 });
+      setShouldOffsetExternalCenter(true);
+      setTimeout(() => setShouldOffsetExternalCenter(false), 100);
+      try { writeMv(selectedStory.geo, 16); } catch {}
     }
   }, [selectedStory?.id])
 
@@ -336,7 +354,12 @@ const MapView = () => {
         if (panel) setSelectedPanelId(panel);
         // Do not recenter the map on mobile when opening from URL
         const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-        if (!isMobile && found.geo) setMapView({ center: found.geo, zoom: 16 });
+        if (!isMobile && found.geo) {
+          // Use original coordinates and let the Map component apply the marker offset  
+          setMapView({ center: found.geo, zoom: 16 });
+          setShouldOffsetExternalCenter(true);
+          setTimeout(() => setShouldOffsetExternalCenter(false), 100);
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -449,6 +472,8 @@ const MapView = () => {
                   fitPadding={40}
                   clusterAnimate={clusterAnim}
                   centerOffsetPixels={{ x: 0, y: -60 }}
+                  offsetExternalCenter={shouldOffsetExternalCenter}
+                  triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
                 />
                 {/* Mobile-only zoom controls: bottom-right vertical + / - */}
                 <div className="pointer-events-none absolute bottom-4 right-3 flex flex-col gap-2 mb-4 z-[12000]">
@@ -495,6 +520,8 @@ const MapView = () => {
                   }}
                   clusterAnimate={clusterAnim}
                   centerOffsetPixels={{ x: 0, y: -95 }}
+                  offsetExternalCenter={shouldOffsetExternalCenter}
+                  triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
                 />
               </div>
 
@@ -582,6 +609,8 @@ const MapView = () => {
                 fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
+                offsetExternalCenter={shouldOffsetExternalCenter}
+                triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
               />
                 {/* Zoom controls: bottom-right vertical + / - */}
                 <div className="pointer-events-none absolute bottom-4 right-3 flex flex-col gap-2 mb-4 z-[12000]">
@@ -623,6 +652,8 @@ const MapView = () => {
                       fitBounds={fitToBounds}
                       clusterAnimate={clusterAnim}
                       centerOffsetPixels={{ x: 0, y: -95 }}
+                      offsetExternalCenter={shouldOffsetExternalCenter}
+                      triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
                     />
                   </div>
                   <div className="flex-1 min-h-0 bg-white overflow-hidden">
@@ -698,6 +729,8 @@ const MapView = () => {
                 fitBounds={fitToBounds}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
+                offsetExternalCenter={shouldOffsetExternalCenter}
+                triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
               />
                 {/* Zoom controls: bottom-right vertical + / - */}
                 <div className="pointer-events-none absolute bottom-4 right-3 flex flex-col gap-2 mb-4 z-[12000]">

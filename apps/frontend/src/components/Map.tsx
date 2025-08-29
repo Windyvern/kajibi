@@ -106,16 +106,20 @@ interface MapProps {
   recenterOnMarkerClickMobile?: boolean;
   // Persist view state to sessionStorage on moveend
   persistViewToSession?: boolean;
+  // Trigger a programmatic marker click for the specified story ID
+  triggerMarkerClickForStoryId?: string;
 }
 
 // Assets (avatar + instagram icon)
 // Use bundler-imported assets to ensure availability
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false, recenterOnMarkerClickMobile = false, persistViewToSession = true }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false, recenterOnMarkerClickMobile = false, persistViewToSession = true, triggerMarkerClickForStoryId }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
+  // Track markers by story ID for programmatic clicking
+  const markersByStoryIdRef = useRef<Map<string, any>>(new globalThis.Map());
   // Track last stories signature to avoid unnecessary marker rebuilds
   const lastStoriesSigRef = useRef<string | null>(null);
   // Reflect selection changes without rebuilding all markers
@@ -725,6 +729,9 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
 
   const marker = L.marker([story.geo.lat, story.geo.lng], { icon: markerIcon, zIndexOffset: isSelected ? 1000 : 0 });
       
+      // Store marker reference for programmatic clicking
+      markersByStoryIdRef.current.set(story.id, marker);
+      
       // Store thumbnail URL for cluster use
   (marker as any).thumbnailUrl = thumbnailUrl;
   (marker as any).isClosed = story.isClosed;
@@ -906,6 +913,17 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
       }
     };
   }, []);
+
+  // Handle programmatic marker click trigger
+  useEffect(() => {
+    if (triggerMarkerClickForStoryId && markersByStoryIdRef.current) {
+      const marker = markersByStoryIdRef.current.get(triggerMarkerClickForStoryId);
+      if (marker) {
+        // Immediate trigger - no delay needed since map is already initialized
+        marker.fire('click');
+      }
+    }
+  }, [triggerMarkerClickForStoryId]);
 
   return (
     <div className="relative w-full h-full">

@@ -33,6 +33,38 @@ const StoryPage = () => {
     return stories.find((s) => (s.handle || '').toLowerCase() === slug.toLowerCase()) || null;
   }, [stories, slug]);
 
+  // Get the ordered stories and context from sessionStorage
+  const { orderedStories, sectionsInfo, isGalleryMobile } = useMemo(() => {
+    try {
+      const orderedIds = JSON.parse(sessionStorage.getItem('viewer:orderedIds') || '[]');
+      const context = sessionStorage.getItem('viewer:context') || 'single';
+      const sectionsRaw = sessionStorage.getItem('viewer:sections');
+      let sectionsData = null;
+      
+      if (sectionsRaw) {
+        sectionsData = JSON.parse(sectionsRaw);
+      }
+      
+      if (orderedIds.length > 0 && stories) {
+        const ordered = orderedIds.map((id: string) => stories.find(s => s.id === id)).filter(Boolean);
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        const isGalleryContext = context === 'gallery';
+        
+        return {
+          orderedStories: ordered,
+          sectionsInfo: sectionsData,
+          isGalleryMobile: isMobile && isGalleryContext
+        };
+      }
+    } catch {}
+    
+    return {
+      orderedStories: stories || [],
+      sectionsInfo: null,
+      isGalleryMobile: false
+    };
+  }, [stories]);
+
   useEffect(() => {
     if (!isLoading && stories && !target) {
       // unknown slug -> back to stories gallery
@@ -85,7 +117,7 @@ const StoryPage = () => {
               <TwoPanelStoryViewer
                 initialStoryId={target.id}
                 initialPanelId={initialPanelId}
-                stories={stories}
+                stories={orderedStories}
                 onClose={() => {
                   const p = new URLSearchParams(window.location.search);
                   const from = p.get('from');
@@ -93,6 +125,8 @@ const StoryPage = () => {
                 }}
                 hideRightPanel
                 hideMetadataPanel
+                advanceStoryOnMobile={isGalleryMobile}
+                firstGroupCount={sectionsInfo?.firstGroupCount}
               />
             </div>
           </div>
@@ -122,12 +156,14 @@ const StoryPage = () => {
         <TwoPanelStoryViewer
           initialStoryId={target.id}
           initialPanelId={initialPanelId}
-          stories={stories}
+          stories={orderedStories}
           onClose={() => {
             const p = new URLSearchParams(window.location.search);
             const from = p.get('from');
             if (from) navigate(decodeURIComponent(from)); else navigate('/stories');
           }}
+          advanceStoryOnMobile={isGalleryMobile}
+          firstGroupCount={sectionsInfo?.firstGroupCount}
         />
       )}
     </div>

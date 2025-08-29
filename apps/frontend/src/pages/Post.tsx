@@ -7,11 +7,37 @@ import { StoryMetadata } from '@/components/StoryMetadata';
 
 const PostPage = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { data: stories, isLoading, error } = usePosts();
+  const { data: allStories, isLoading, error } = usePosts();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const initialPanelId = params.get('panel') || undefined;
-  const story = useMemo(() => (stories || []).find(s => (s.handle || '').toLowerCase() === (slug || '').toLowerCase()) || null, [stories, slug]);
+  const story = useMemo(() => (allStories || []).find(s => (s.handle || '').toLowerCase() === (slug || '').toLowerCase()) || null, [allStories, slug]);
+
+  // Get the ordered stories and context from sessionStorage
+  const { orderedStories, viewerContext, isGalleryMobile } = useMemo(() => {
+    try {
+      const orderedIds = JSON.parse(sessionStorage.getItem('viewer:posts:orderedIds') || '[]');
+      const context = sessionStorage.getItem('viewer:posts:context') || 'single';
+      
+      if (orderedIds.length > 0 && allStories) {
+        const ordered = orderedIds.map((id: string) => allStories.find(s => s.id === id)).filter(Boolean);
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        const isGalleryContext = context === 'gallery';
+        
+        return {
+          orderedStories: ordered,
+          viewerContext: context,
+          isGalleryMobile: isMobile && isGalleryContext
+        };
+      }
+    } catch {}
+    
+    return {
+      orderedStories: story ? [story] : [],
+      viewerContext: 'single',
+      isGalleryMobile: false
+    };
+  }, [allStories, story]);
 
   if (isLoading) return <div className="min-h-screen bg-black text-white flex items-center justify-center"><Loader2 className="animate-spin" size={20} /></div>;
   if (error || !story) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Introuvable</div>;
@@ -25,9 +51,10 @@ const PostPage = () => {
             <TwoPanelStoryViewer
               initialStoryId={story.id}
               initialPanelId={initialPanelId}
-              stories={[story]}
+              stories={orderedStories}
               onClose={() => navigate(-1)}
               hideRightPanel
+              advanceStoryOnMobile={isGalleryMobile}
             />
           </div>
         </div>

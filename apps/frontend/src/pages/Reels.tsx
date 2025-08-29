@@ -69,6 +69,13 @@ export default function ReelsPage() {
               const base = `/reel/${encodeURIComponent(story.handle || story.id)}`;
               const current = `${location.pathname}${location.search}`;
               const from = `from=${encodeURIComponent(current)}`;
+              
+              // Store the complete sorted story list for swipe navigation
+              try {
+                sessionStorage.setItem('viewer:reels:orderedIds', JSON.stringify(visible.map(s => s.id)));
+                sessionStorage.setItem('viewer:reels:context', 'map');
+              } catch {}
+              
               navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
             }}
             center={mapView.center}
@@ -92,6 +99,13 @@ export default function ReelsPage() {
               const base = `/reel/${encodeURIComponent(story.handle || story.id)}`;
               const current = `${location.pathname}${location.search}`;
               const from = `from=${encodeURIComponent(current)}`;
+              
+              // Store the complete sorted story list for swipe navigation
+              try {
+                sessionStorage.setItem('viewer:reels:orderedIds', JSON.stringify(visible.map(s => s.id)));
+                sessionStorage.setItem('viewer:reels:context', 'gallery');
+              } catch {}
+              
               navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
             }}
           />
