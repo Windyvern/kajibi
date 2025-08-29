@@ -62,6 +62,33 @@ const GalleryPage = () => {
   };
 
   useEffect(() => () => { if (mvTimerRef.current) window.clearTimeout(mvTimerRef.current); }, []);
+  // Seed gallery's map-related session values from the toggle snapshot when entering gallery (no map present)
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const isMapMode = sp.get('style') === 'map';
+      if (isMapMode) return;
+      // If bounds are missing, restore from toggle snapshot; also restore center/zoom
+      const bRaw = sessionStorage.getItem('view:map:bounds');
+      if (!bRaw) {
+        const bSnap = sessionStorage.getItem('toggle:lastMapBounds');
+        if (bSnap) sessionStorage.setItem('view:map:bounds', bSnap);
+      }
+      const cRaw = sessionStorage.getItem('view:map:center');
+      const zRaw = sessionStorage.getItem('view:map:zoom');
+      const hasView = !!(cRaw && zRaw);
+      if (!hasView) {
+        const vSnap = sessionStorage.getItem('toggle:lastMapView');
+        if (vSnap) {
+          const v = JSON.parse(vSnap) as { center: { lat: number; lng: number }; zoom: number };
+          if (v && v.center && typeof v.center.lat === 'number' && typeof v.center.lng === 'number' && typeof v.zoom === 'number') {
+            sessionStorage.setItem('view:map:center', JSON.stringify(v.center));
+            sessionStorage.setItem('view:map:zoom', String(v.zoom));
+          }
+        }
+      }
+    } catch {}
+  }, []);
   // Restore scroll if returning from a story in gallery context
   const locKey = `${location.pathname}${location.search}`;
   useEffect(() => {
@@ -232,6 +259,9 @@ const GalleryPage = () => {
             centerOffsetPixels={{ x: 0, y: -95 }}
             selectedStoryId={selectedStory?.id}
             clusterAnimate={clusterAnim}
+            suppressZoomOnMarkerClick
+            // Do not let gallery map mode overwrite global last map view while a story is open
+            persistViewToSession={!selectedStory}
           />
           {selectedStory && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[12000]">

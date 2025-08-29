@@ -104,13 +104,15 @@ interface MapProps {
   offsetExternalCenter?: boolean;
   // When true, allow marker clicks to recenter/zoom even on mobile
   recenterOnMarkerClickMobile?: boolean;
+  // Persist view state to sessionStorage on moveend
+  persistViewToSession?: boolean;
 }
 
 // Assets (avatar + instagram icon)
 // Use bundler-imported assets to ensure availability
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false, recenterOnMarkerClickMobile = false }: MapProps) => {
+export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onViewChange, onBoundsChange, fitBounds, fitPadding = 60, suppressZoomOnMarkerClick = false, clusterAnimate = true, chunkedLoading = false, centerOffsetPixels, clusterRadiusByZoom, offsetExternalCenter = false, nativeClusterClick = false, recenterOnMarkerClickMobile = false, persistViewToSession = true }: MapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -352,11 +354,13 @@ export const Map = ({ stories, onStorySelect, selectedStoryId, center, zoom, onV
         const z = mapInstanceRef.current!.getZoom();
         const b = mapInstanceRef.current!.getBounds();
         // Persist last view for cross-page features (gallery prioritization, initial view restore)
-        try {
-          sessionStorage.setItem('view:map:center', JSON.stringify({ lat: c.lat, lng: c.lng }));
-          sessionStorage.setItem('view:map:zoom', String(z));
-          sessionStorage.setItem('view:map:bounds', JSON.stringify({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() }));
-        } catch {}
+        if (persistViewToSession) {
+          try {
+            sessionStorage.setItem('view:map:center', JSON.stringify({ lat: c.lat, lng: c.lng }));
+            sessionStorage.setItem('view:map:zoom', String(z));
+            sessionStorage.setItem('view:map:bounds', JSON.stringify({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() }));
+          } catch {}
+        }
         if (onViewChange) onViewChange({ lat: c.lat, lng: c.lng }, z);
         if (onBoundsChange) {
           onBoundsChange({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() });
