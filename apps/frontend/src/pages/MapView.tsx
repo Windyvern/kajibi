@@ -379,7 +379,7 @@ const MapView = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Responsive Header: Zoom +/- (left), Search (center), Nav (right) */}
-      {!selectedStory && !params.get('story') && (
+      {!selectedStory && (
         <div className="fixed top-3 left-3 right-3 z-[10000]">
           <SearchHeader
             dataLovId="src/pages/MapView.tsx:231:8"
@@ -395,16 +395,14 @@ const MapView = () => {
       )}
       {/* Mobile Layout (rendered conditionally to avoid double-mount) */}
       {viewport.w < 768 && (
-        (selectedStory || params.get('story')) ? (
+        selectedStory ? (
           <div className="relative min-h-screen">
-            {selectedStory && (
-              <TwoPanelStoryViewer 
-                initialStoryId={selectedStory.id}
-                initialPanelId={selectedPanelId}
-                stories={stories}
-                onClose={handleCloseStory}
-              />
-            )}
+            <TwoPanelStoryViewer 
+              initialStoryId={selectedStory.id}
+              initialPanelId={selectedPanelId}
+              stories={stories}
+              onClose={handleCloseStory}
+            />
           </div>
         ) : (
           <div className="relative h-[100dvh]">

@@ -192,9 +192,6 @@ const GalleryPage = () => {
   })();
 
   // Map view: full height map with fixed header
-  // Store pre-open map view (as mv) to restore after closing a story in map mode
-  const preOpenMvRef = useRef<string | null>(null);
-  const suppressMvRef = useRef<boolean>(false);
 
   if (isMap) {
     const selectedSlug = params.get('story');
@@ -215,7 +212,7 @@ const GalleryPage = () => {
         <div className="h-[100dvh] w-full">
           <Map
             stories={displayedStories.filter(s => s.geo)}
-            onStorySelect={(story, meta?: { prevCenter?: { lat: number; lng: number }, prevZoom?: number }) => {
+            onStorySelect={(story) => {
               const pid = q ? matchedPanelByStory[story.id] : undefined;
               const next = new URLSearchParams(location.search);
               next.set('style', 'map');
@@ -223,31 +220,11 @@ const GalleryPage = () => {
               if (pid) next.set('panel', pid); else next.delete('panel');
               const from = params.get('from');
               if (from) next.set('from', from);
-              // Temporarily suppress mv writes while opening the viewer
-              suppressMvRef.current = true;
-              // Remember previous view before centering to story, so we can restore after close
-              try {
-                if (meta?.prevCenter && typeof meta.prevZoom === 'number') {
-                  const { lat, lng } = meta.prevCenter;
-                  preOpenMvRef.current = `${lat.toFixed(5)},${lng.toFixed(5)},${Math.round(meta.prevZoom)}`;
-                } else {
-                  // Fallback to last persisted view if available
-                  const cRaw = sessionStorage.getItem('view:map:center');
-                  const zRaw = sessionStorage.getItem('view:map:zoom');
-                  if (cRaw && zRaw) {
-                    const c = JSON.parse(cRaw);
-                    const z = parseInt(zRaw, 10);
-                    if (c && typeof c.lat === 'number' && typeof c.lng === 'number' && Number.isFinite(z)) {
-                      preOpenMvRef.current = `${c.lat.toFixed(5)},${c.lng.toFixed(5)},${z}`;
-                    }
-                  }
-                }
-              } catch {}
               navigate({ pathname: location.pathname, search: `?${next.toString()}` });
             }}
             center={mapView.center}
             zoom={mapView.zoom}
-            onViewChange={(c,z)=> { setMapView({ center: c, zoom: z }); if (!selectedStory && !suppressMvRef.current) { writeMv(c, z); } }}
+            onViewChange={(c,z)=> { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
             onBoundsChange={(b) => {
               try { sessionStorage.setItem('view:map:bounds', JSON.stringify(b)); } catch {}
             }}
@@ -267,27 +244,7 @@ const GalleryPage = () => {
                     const next = new URLSearchParams(location.search);
                     next.delete('story');
                     next.delete('panel');
-                    // Restore pre-open mv if captured, and update mapView state to match
-                    try {
-                      const mv = preOpenMvRef.current;
-                      if (mv) {
-                        next.set('mv', mv);
-                        const [latS, lngS, zS] = mv.split(',');
-                        const lat = parseFloat(latS); const lng = parseFloat(lngS); const z = parseInt(zS, 10);
-                        if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(z)) {
-                          setMapView({ center: { lat, lng }, zoom: z });
-                          // Persist to sessionStorage as well for in-bounds logic
-                          try {
-                            sessionStorage.setItem('view:map:center', JSON.stringify({ lat, lng }));
-                            sessionStorage.setItem('view:map:zoom', String(z));
-                          } catch {}
-                        }
-                      }
-                    } catch {}
                     navigate({ pathname: location.pathname, search: `?${next.toString()}` });
-                    // Clear the cached pre-open mv
-                    preOpenMvRef.current = null;
-                    suppressMvRef.current = false;
                   }}
                   hideRightPanel
                 />
@@ -340,7 +297,6 @@ const GalleryPage = () => {
           try { sessionStorage.setItem(`scroll:${current}`, String(window.scrollY)); } catch {}
           const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
           if (story.geo && galleryMap && !isMobile) {
-            // Persist the exact ordering the user is viewing for the viewer to respect
             try {
               const ordered: Story[] = sections
                 ? [...(sections?.[0]?.stories || []), ...(sections?.[1]?.stories || [])]
