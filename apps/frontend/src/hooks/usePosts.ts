@@ -29,7 +29,6 @@ export const usePosts = () => {
         'populate%5Bmedia%5D=true' +
           '&populate%5Bauthor%5D%5Bpopulate%5D=avatar' +
           '&populate%5Bcategory%5D=true' +
-          '&populate%5Bcover%5D=true' +
           '&pagination%5BpageSize%5D=1000'
       );
       
@@ -81,7 +80,8 @@ export const usePosts = () => {
           handle: post.slug || post.id,
           description: post.caption || '',
           panels: panels,
-          thumbnail: panels.find(p => p.type === 'image')?.media || getMediaUrl(post.cover),
+          thumbnail: panels.find(p => p.type === 'image')?.media || 
+                    (post.media && post.media[0] ? getMediaUrl(post.media[0]) : undefined),
           author: post.author?.name || '',
           category: post.category?.name || '',
           publishedAt: post.taken_at || post.publishedAt || post.createdAt,

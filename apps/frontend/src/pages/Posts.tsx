@@ -16,13 +16,14 @@ import { Plus, Minus } from 'lucide-react';
 
 // For now, posts are a subset of stories with a postedDate present and optionally a type marker
 export default function PostsPage() {
-  const { data: posts } = usePosts();
+  const { data: posts, isLoading, error } = usePosts();
   const { showClosed, clusterAnim } = useOptions();
   const [params] = useSearchParams();
   const q = params.get('q');
   const navigate = useNavigate();
   const location = useLocation();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  
   const parseMv = () => {
     try {
       const sp = new URLSearchParams(window.location.search);
@@ -51,6 +52,28 @@ export default function PostsPage() {
   const { filtered, matchedPanelByStory } = useSearchFilter(posts, q, fields);
   let visible = q ? filtered : posts;
   if (!showClosed) visible = visible.filter(s => !s.isClosed);
+
+  // Add loading and error states
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg">Chargement des posts...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center text-red-600">
+          <div className="text-lg">Erreur lors du chargement des posts</div>
+          <div className="text-sm mt-2">{error.message}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

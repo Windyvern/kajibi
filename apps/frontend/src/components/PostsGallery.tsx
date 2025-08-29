@@ -9,7 +9,7 @@ interface PostsGalleryProps {
 
 export const PostsGallery = ({ posts, onSelect }: PostsGalleryProps) => {
   // Safety check for undefined posts
-  if (!posts || !Array.isArray(posts)) {
+  if (!posts || !Array.isArray(posts) || posts.length === 0) {
     return (
       <div className="p-6">
         <h2 className="text-2xl font-bold mb-6 text-foreground">Posts récents</h2>
