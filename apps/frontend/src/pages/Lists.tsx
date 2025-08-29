@@ -52,11 +52,11 @@ const ListsPage = () => {
       </div>
 
       {!isMap && (
-      <div className="p-6 mt-[85px] md:mt-12">
+      <div className="p-6 mt-24 md:mt-16">
         <div className="flex items-center justify-between">
-          <h2 className="w-full xl:max-w-[1460px] mx-auto text-2xl font-bold mb-6 text-foreground">Listes</h2>
+          {/*<h2 className="w-full xl:max-w-[1460px] mx-auto text-2xl font-bold mb-6 text-foreground">Listes</h2>*/}
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between ">
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6 w-full xl:max-w-[1460px] mx-auto">
             {filteredLists.map((l) => (
               <Link key={l.id} to={`/lists/${encodeURIComponent(l.slug || l.id)}`} className="block group">

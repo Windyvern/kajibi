@@ -108,19 +108,15 @@ function PostCard({ post, onSelect, formatDate, renderStars }: {
       className={`relative z-0 hover:z-20 group cursor-pointer transition-transform hover:scale-105 duration-200 ${post.isClosed ? 'opacity-80' : ''}`}
       onClick={() => onSelect && onSelect(post)}
     >
-      <div ref={wrapRef} className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg">
+      <div ref={wrapRef} className="relative aspect-[1/1] overflow-hidden">
         {/* Thumbnail Image */}
         <img src={post.thumbnail} alt={post.title} className={`w-full h-full object-cover ${post.isClosed ? 'grayscale' : ''}`} />
 
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-        {/* Post indicator */}
-        <div className="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded-full text-xs font-semibold">
-          📸 POST
-        </div>
+         {/* <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" /> */}
 
         {/* Content Overlay */}
+        {/* 
         <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-semibold text-lg line-clamp-2 flex-1">{post.title}</h3>
@@ -140,7 +136,7 @@ function PostCard({ post, onSelect, formatDate, renderStars }: {
               </div>
             )}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

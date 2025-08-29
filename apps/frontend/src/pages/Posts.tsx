@@ -86,7 +86,7 @@ export default function PostsPage() {
 
             {/* Map view for posts with pins where geo exists (toggle) */}
       {isMap && (
-        <div className="h-[60vh]">
+        <div className="h-[100dvh]">
           <PostsMap
             posts={visible}
             onStorySelect={(story) => {
@@ -110,16 +110,18 @@ export default function PostsPage() {
 
       {/* Gallery list (toggle) */}
       {!isMap && (
-        <PostsGallery
-          posts={visible}
-          onSelect={(story) => {
-            const pid = q ? matchedPanelByStory[story.id] : undefined;
-            const base = `/post/${encodeURIComponent(story.handle || story.id)}`;
-            const current = `${location.pathname}${location.search}`;
-            const from = `from=${encodeURIComponent(current)}`;
-            navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
-          }}
-        />
+        <div className="mt-[85px] md:mt-12">
+          <PostsGallery
+            posts={visible}
+            onSelect={(story) => {
+              const pid = q ? matchedPanelByStory[story.id] : undefined;
+              const base = `/post/${encodeURIComponent(story.handle || story.id)}`;
+              const current = `${location.pathname}${location.search}`;
+              const from = `from=${encodeURIComponent(current)}`;
+              navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
+            }}
+          />
+        </div>
       )}
     </div>
   );
