@@ -41,12 +41,6 @@
         "videos"
       ]
     },
-    "articles": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::article.article",
-      "inversedBy": "reels"
-    },
     "slug": {
       "type": "uid"
     },
@@ -102,6 +96,10 @@
     },
     "address": {
       "type": "string"
+    },
+    "location": {
+      "type": "customField",
+      "customField": "plugin::google-maps.location-picker"
     }
   }
 }

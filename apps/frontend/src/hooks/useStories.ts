@@ -53,6 +53,9 @@ export const useStories = () => {
           '&populate%5Bavatar%5D=true' +
           // Populate lists and their cover for thumbnails
           '&populate%5Blists%5D%5Bpopulate%5D=cover' +
+          // Populate posts and reels relations to identify content types
+          '&populate%5Bposts%5D=true' +
+          '&populate%5Breels%5D=true' +
           '&pagination%5BpageSize%5D=1000'
       );
       const articles = response.data;

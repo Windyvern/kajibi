@@ -8,14 +8,15 @@ import OptionsPopover from '@/components/OptionsPopover';
 import { useOptions } from '@/context/OptionsContext';
 import { usePosts } from '@/hooks/usePosts';
 import { useSearchFilter } from '@/hooks/useSearchFilter';
-import { Map } from '@/components/Map';
+import { PostsMap } from '@/components/PostsMap';
+import { PostsGallery } from '@/components/PostsGallery';
 import { Story } from '@/types/story';
 import { SearchHeader } from '@/components/SearchHeader';
 import { Plus, Minus } from 'lucide-react';
 
 // For now, posts are a subset of stories with a postedDate present and optionally a type marker
 export default function PostsPage() {
-  const { data: stories } = usePosts();
+  const { data: posts } = usePosts();
   const { showClosed, clusterAnim } = useOptions();
   const [params] = useSearchParams();
   const q = params.get('q');
@@ -39,10 +40,6 @@ export default function PostsPage() {
   const [mapView, setMapView] = useState<{ center: { lat: number; lng: number }; zoom: number }>(() => parseMv() || { center: { lat: 41.5, lng: 70 }, zoom: 3 });
   const isMap = (params.get('style') === 'map');
 
-  const posts: Story[] = useMemo(() => {
-    return (stories || []).filter(s => Boolean(s.postedDate) && !(s as any).isReel);
-  }, [stories]);
-
   const sf = params.get('sf') || 't,u,a,d,i';
   const fields = {
     title: sf.includes('t'),
@@ -64,11 +61,11 @@ export default function PostsPage() {
           onToggleFilters={() => setFiltersOpen(o => !o)}/>
       </div>
 
-      {/* Map view for posts with pins where geo exists (toggle) */}
+            {/* Map view for posts with pins where geo exists (toggle) */}
       {isMap && (
-        <div className="flex h-screen w-full">
-          <Map
-            stories={visible.filter(s => s.geo)}
+        <div className="h-[60vh]">
+          <PostsMap
+            posts={visible}
             onStorySelect={(story) => {
               const pid = q ? matchedPanelByStory[story.id] : undefined;
               const base = `/post/${encodeURIComponent(story.handle || story.id)}`;
@@ -78,48 +75,28 @@ export default function PostsPage() {
             }}
             center={mapView.center}
             zoom={mapView.zoom}
-            onViewChange={(c,z)=> { setMapView({ center: c, zoom: z }); writeMv(c, z); }}
             clusterAnimate={clusterAnim}
             fitPadding={80}
-            centerOffsetPixels={{ x: 0, y: -95 }}
-            offsetExternalCenter
+            onViewChange={(center, zoom) => {
+              setMapView({ center, zoom });
+              writeMv(center, zoom);
+            }}
           />
         </div>
       )}
 
       {/* Gallery list (toggle) */}
       {!isMap && (
-      <div className="p-6 mt-[85px] md:mt-12">
-        <h2 className="text-2xl font-bold mb-4">Posts récents</h2>
-        <div className="grid grid-cols-1 [@media(min-width:800px)]:grid-cols-3 xl:grid-cols-4 gap-6 w-full xl:max-w-[1460px] mx-auto">
-          {visible.map((story) => (
-            <button
-              key={story.id}
-              onClick={() => {
-                const pid = q ? matchedPanelByStory[story.id] : undefined;
-                const base = `/post/${encodeURIComponent(story.handle || story.id)}`;
-                const current = `${location.pathname}${location.search}`;
-                const from = `from=${encodeURIComponent(current)}`;
-                navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
-              }}
-              className="relative aspect-[3/4] rounded-xl overflow-hidden shadow-lg group"
-            >
-              {story.thumbnail && (
-                <img src={story.thumbnail} className={`w-full h-full object-cover ${story.isClosed ? 'grayscale' : ''}`} />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-lg line-clamp-2 flex-1 text-left">{story.title}</h3>
-                  {story.isClosed && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-red-600 text-white whitespace-nowrap">Fermé</span>
-                  )}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
+        <PostsGallery
+          posts={visible}
+          onSelect={(story) => {
+            const pid = q ? matchedPanelByStory[story.id] : undefined;
+            const base = `/post/${encodeURIComponent(story.handle || story.id)}`;
+            const current = `${location.pathname}${location.search}`;
+            const from = `from=${encodeURIComponent(current)}`;
+            navigate(pid ? `${base}?${from}&panel=${encodeURIComponent(pid)}` : `${base}?${from}`);
+          }}
+        />
       )}
     </div>
   );

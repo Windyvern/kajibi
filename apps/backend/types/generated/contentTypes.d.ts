@@ -448,13 +448,13 @@ export interface ApiArticleArticle extends Struct.CollectionTypeSchema {
       'images' | 'files' | 'videos' | 'audios',
       true
     >;
-    posts: Schema.Attribute.Relation<'manyToMany', 'api::post.post'>;
+    posts: Schema.Attribute.Relation<'oneToMany', 'api::post.post'>;
     price_max: Schema.Attribute.Decimal;
     price_min: Schema.Attribute.Decimal;
     prizes: Schema.Attribute.Relation<'manyToMany', 'api::prize.prize'>;
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal;
-    reels: Schema.Attribute.Relation<'manyToMany', 'api::reel.reel'>;
+    reels: Schema.Attribute.Relation<'oneToMany', 'api::reel.reel'>;
     slug: Schema.Attribute.UID<'title'>;
     tags: Schema.Attribute.Relation<'manyToMany', 'api::tag.tag'>;
     title: Schema.Attribute.String;
@@ -697,7 +697,6 @@ export interface ApiPostPost extends Struct.CollectionTypeSchema {
   };
   attributes: {
     address: Schema.Attribute.String;
-    articles: Schema.Attribute.Relation<'manyToMany', 'api::article.article'>;
     author: Schema.Attribute.Relation<'manyToOne', 'api::author.author'>;
     caption: Schema.Attribute.Text;
     category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
@@ -710,6 +709,8 @@ export interface ApiPostPost extends Struct.CollectionTypeSchema {
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::post.post'> &
       Schema.Attribute.Private;
+    location: Schema.Attribute.JSON &
+      Schema.Attribute.CustomField<'plugin::google-maps.location-picker'>;
     longitude: Schema.Attribute.Float;
     media: Schema.Attribute.Media<'images' | 'videos', true>;
     prizes: Schema.Attribute.Relation<'manyToMany', 'api::prize.prize'>;
@@ -793,7 +794,6 @@ export interface ApiReelReel extends Struct.CollectionTypeSchema {
   };
   attributes: {
     address: Schema.Attribute.String;
-    articles: Schema.Attribute.Relation<'manyToMany', 'api::article.article'>;
     author: Schema.Attribute.Relation<'manyToOne', 'api::author.author'>;
     caption: Schema.Attribute.Text;
     category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
@@ -807,6 +807,8 @@ export interface ApiReelReel extends Struct.CollectionTypeSchema {
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::reel.reel'> &
       Schema.Attribute.Private;
+    location: Schema.Attribute.JSON &
+      Schema.Attribute.CustomField<'plugin::google-maps.location-picker'>;
     longitude: Schema.Attribute.Float;
     media: Schema.Attribute.Media<'images' | 'videos', true>;
     prizes: Schema.Attribute.Relation<'manyToMany', 'api::prize.prize'>;

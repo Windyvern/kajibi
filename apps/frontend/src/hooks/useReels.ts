@@ -7,78 +7,93 @@ function getMediaUrl(file: any): string | undefined {
   if (typeof file === 'string') {
     return `${STRAPI_URL}/uploads/${file}`;
   }
-  const entry = file?.data?.attributes ? file.data : file;
-  const url = entry?.attributes?.url || entry?.url;
+  const url = file?.url;
   if (url) return `${STRAPI_URL}${url}`;
   return undefined;
 }
 
+function isVideoFile(file: any, url?: string): boolean {
+  const mime = file?.mime;
+  if (typeof mime === 'string' && mime.toLowerCase().includes('video')) return true;
+  const u = url || file?.url || '';
+  return /\.(mp4|mov|webm)$/i.test(u);
+}
+
 export const useReels = () => {
   return useQuery({
-    queryKey: ['reels-index'],
+    queryKey: ['reels'],
     queryFn: async (): Promise<Story[]> => {
-      const res = await strapiFetch<any>(
+      // Fetch reels directly from the Reels content type
+      const response = await strapiFetch<any>(
         '/api/reels',
-        [
-          'populate%5Bmedia%5D=true',
-          'populate%5Barticles%5D%5Bfields%5D%5B0%5D=slug',
-          'populate%5Barticles%5D%5Bfields%5D%5B1%5D=title',
-          'populate%5Barticles%5D%5Bfields%5D%5B2%5D=username',
-          'populate%5Barticles%5D%5Bpopulate%5D%5Bcover%5D=true',
-          'populate%5Barticles%5D%5Bpopulate%5D%5Bmedia%5D=true',
-          'pagination%5BpageSize%5D=1000',
-        ].join('&')
+        'populate%5Bmedia%5D=true' +
+          '&populate%5Bauthor%5D%5Bpopulate%5D=avatar' +
+          '&populate%5Bcategory%5D=true' +
+          '&populate%5Bcover%5D=true' +
+          '&pagination%5BpageSize%5D=1000'
       );
-      const data = res.data || [];
-      return data.map((e: any) => {
-        const attrs = e.attributes ?? e;
-        const mediaArr = Array.isArray(attrs.media?.data)
-          ? attrs.media.data
-          : Array.isArray(attrs.media)
-            ? attrs.media
-            : [];
-        const first = mediaArr[0];
-        const url = getMediaUrl(first);
-        const panels: StoryPanelData[] = url ? [{ id: `${e.id}-v-0`, type: 'video', media: url, orderIndex: 0 }] : [];
-
-        // Geo inherit from first linked article if available
-        let lat: number | undefined;
-        let lng: number | undefined;
-        const articlesArr = (attrs.articles?.data || attrs.articles || []) as any[];
-        const firstArticle = articlesArr[0];
-        const a = firstArticle?.attributes || firstArticle;
-        if (a?.latitude && a?.longitude) {
-          lat = Number(a.latitude);
-          lng = Number(a.longitude);
+      
+      const reels = response.data || [];
+      
+      // Convert reels to Story format for compatibility with existing components
+      return reels.map((reel: any) => {
+        // In the new Strapi format, data is flat (no nested attributes)
+        
+        // Create panels from media
+        const panels: StoryPanelData[] = [];
+        if (reel.media && Array.isArray(reel.media)) {
+          reel.media.forEach((mediaItem: any, index: number) => {
+            const url = getMediaUrl(mediaItem);
+            
+            if (url) {
+              panels.push({
+                id: `${reel.id}-media-${index}`,
+                type: isVideoFile(mediaItem, url) ? 'video' : 'image',
+                media: url,
+                slug: `${reel.id}-media-${index}`,
+                orderIndex: index,
+              });
+            }
+          });
         }
-        const linked = (articlesArr || []).map((it: any) => {
-          const at = it?.attributes || it || {};
-          return {
-            id: String(it?.id || at.id || at.slug || Math.random()),
-            slug: at.slug,
-            title: at.title,
-            username: at.username,
-            thumbnail: getMediaUrl(at.cover) || (Array.isArray(at.media?.data) ? getMediaUrl(at.media.data[0]) : undefined)
-          };
-        });
+        
+        // If no media panels, create a text panel from caption
+        if (panels.length === 0 && reel.caption) {
+          panels.push({
+            id: `${reel.id}-caption`,
+            type: 'text',
+            content: reel.caption,
+            slug: `${reel.id}-caption`,
+            orderIndex: 0,
+          });
+        }
+
+        // Extract geographic data
+        const hasGeo = reel.latitude && reel.longitude;
+        const geo = hasGeo ? {
+          lat: parseFloat(reel.latitude),
+          lng: parseFloat(reel.longitude),
+        } : null;
 
         return {
-          id: `reel-${e.id}`,
-          title: attrs.caption || 'Reel',
-          author: attrs.author?.data?.attributes?.name || attrs.author?.name || '',
-          authorSlug: attrs.author?.data?.attributes?.slug || attrs.author?.slug,
-          handle: `reel-${e.id}`,
-          publishedAt: attrs.createdAt,
-          postedDate: attrs.taken_at,
-          panels,
-          thumbnail: url,
-          geo: lat != null && lng != null ? { lat, lng } : undefined,
-          isClosed: false,
-          username: attrs.username || undefined,
-          mentions: Array.isArray(attrs.mentions) ? attrs.mentions : undefined,
-          linkedArticles: linked.length ? linked : undefined,
+          id: reel.id,
+          title: reel.title || reel.caption || 'Reel sans titre',
+          handle: reel.slug || reel.id,
+          description: reel.caption || '',
+          panels: panels,
+          thumbnail: panels.find(p => p.type === 'image' || p.type === 'video')?.media || getMediaUrl(reel.cover),
+          author: reel.author?.name || '',
+          category: reel.category?.name || '',
+          publishedAt: reel.taken_at || reel.publishedAt || reel.createdAt,
+          lastVisit: reel.taken_at || reel.publishedAt || reel.createdAt,
+          postedDate: reel.taken_at || reel.publishedAt || reel.createdAt,
+          username: reel.author?.name ? `@${reel.author.name}` : '',
+          rating: 0,
+          address: reel.address || '',
+          isClosed: reel.is_closed || false,
+          geo: geo,
         } as Story;
       });
-    }
+    },
   });
 };

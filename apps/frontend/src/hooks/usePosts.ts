@@ -7,92 +7,93 @@ function getMediaUrl(file: any): string | undefined {
   if (typeof file === 'string') {
     return `${STRAPI_URL}/uploads/${file}`;
   }
-  const entry = file?.data?.attributes ? file.data : file;
-  const url = entry?.attributes?.url || entry?.url;
+  const url = file?.url;
   if (url) return `${STRAPI_URL}${url}`;
   return undefined;
 }
 
 function isVideoFile(file: any, url?: string): boolean {
-  const mime = file?.data?.attributes?.mime || file?.mime;
+  const mime = file?.mime;
   if (typeof mime === 'string' && mime.toLowerCase().includes('video')) return true;
-  const u = url || file?.data?.attributes?.url || file?.url || '';
+  const u = url || file?.url || '';
   return /\.(mp4|mov|webm)$/i.test(u);
 }
 
 export const usePosts = () => {
   return useQuery({
-    queryKey: ['posts-index'],
+    queryKey: ['posts'],
     queryFn: async (): Promise<Story[]> => {
-      const res = await strapiFetch<any>(
+      // Fetch posts directly from the Posts content type
+      const response = await strapiFetch<any>(
         '/api/posts',
-        [
-          'populate%5Bmedia%5D=true',
-          // Populate only needed article fields to avoid circular populate causing 500
-          'populate%5Barticles%5D%5Bfields%5D%5B0%5D=slug',
-          'populate%5Barticles%5D%5Bfields%5D%5B1%5D=title',
-          'populate%5Barticles%5D%5Bfields%5D%5B2%5D=username',
-          'populate%5Barticles%5D%5Bpopulate%5D%5Bcover%5D=true',
-          'populate%5Barticles%5D%5Bpopulate%5D%5Bmedia%5D=true',
-          'pagination%5BpageSize%5D=1000',
-        ].join('&')
+        'populate%5Bmedia%5D=true' +
+          '&populate%5Bauthor%5D%5Bpopulate%5D=avatar' +
+          '&populate%5Bcategory%5D=true' +
+          '&populate%5Bcover%5D=true' +
+          '&pagination%5BpageSize%5D=1000'
       );
-      const data = res.data || [];
-  return data.map((e: any) => {
-        const attrs = e.attributes ?? e;
-        const mediaArr = Array.isArray(attrs.media?.data)
-          ? attrs.media.data
-          : Array.isArray(attrs.media)
-            ? attrs.media
-            : [];
-        const panels: StoryPanelData[] = (mediaArr || []).map((file: any, i: number) => {
-          const url = getMediaUrl(file);
-          const type = isVideoFile(file, url) ? 'video' : 'image';
-          return {
-            id: `${e.id}-m-${i}`,
-            type,
-            media: url,
-            orderIndex: i,
-          } as StoryPanelData;
-        }).filter(p => p.media);
-
-        // Try inherit geo from first linked article
-        let lat: number | undefined;
-        let lng: number | undefined;
-        const articlesArr = (attrs.articles?.data || attrs.articles || []) as any[];
-        const firstArticle = articlesArr[0];
-        const a = firstArticle?.attributes || firstArticle;
-        if (a?.latitude && a?.longitude) {
-          lat = Number(a.latitude);
-          lng = Number(a.longitude);
+      
+      const posts = response.data || [];
+      
+      // Convert posts to Story format for compatibility with existing components
+      return posts.map((post: any) => {
+        // In the new Strapi format, data is flat (no nested attributes)
+        
+        // Create panels from media
+        const panels: StoryPanelData[] = [];
+        if (post.media && Array.isArray(post.media)) {
+          post.media.forEach((mediaItem: any, index: number) => {
+            const url = getMediaUrl(mediaItem);
+            
+            if (url) {
+              panels.push({
+                id: `${post.id}-media-${index}`,
+                type: isVideoFile(mediaItem, url) ? 'video' : 'image',
+                media: url,
+                slug: `${post.id}-media-${index}`,
+                orderIndex: index,
+              });
+            }
+          });
         }
-        const linked = (articlesArr || []).map((it: any) => {
-          const at = it?.attributes || it || {};
-          return {
-            id: String(it?.id || at.id || at.slug || Math.random()),
-            slug: at.slug,
-            title: at.title,
-            username: at.username,
-            thumbnail: getMediaUrl(at.cover) || (Array.isArray(at.media?.data) ? getMediaUrl(at.media.data[0]) : undefined)
-          };
-        });
+        
+        // If no media panels, create a text panel from caption
+        if (panels.length === 0 && post.caption) {
+          panels.push({
+            id: `${post.id}-caption`,
+            type: 'text',
+            content: post.caption,
+            slug: `${post.id}-caption`,
+            orderIndex: 0,
+          });
+        }
+
+        // Extract geographic data
+        const hasGeo = post.latitude && post.longitude;
+        const geo = hasGeo ? {
+          lat: parseFloat(post.latitude),
+          lng: parseFloat(post.longitude),
+        } : null;
+        
         return {
-          id: `post-${e.id}`,
-          title: attrs.caption || 'Post',
-          author: attrs.author?.data?.attributes?.name || attrs.author?.name || '',
-          authorSlug: attrs.author?.data?.attributes?.slug || attrs.author?.slug,
-          handle: `post-${e.id}`,
-          publishedAt: attrs.createdAt,
-          postedDate: attrs.taken_at,
-          panels,
-          thumbnail: panels[0]?.media,
-          geo: lat != null && lng != null ? { lat, lng } : undefined,
-          isClosed: false,
-          username: attrs.username || undefined,
-          mentions: Array.isArray(attrs.mentions) ? attrs.mentions : undefined,
-          linkedArticles: linked.length ? linked : undefined,
+          id: post.id,
+          title: post.title || post.caption || 'Post sans titre',
+          handle: post.slug || post.id,
+          description: post.caption || '',
+          panels: panels,
+          thumbnail: panels.find(p => p.type === 'image')?.media || getMediaUrl(post.cover),
+          author: post.author?.name || '',
+          category: post.category?.name || '',
+          publishedAt: post.taken_at || post.publishedAt || post.createdAt,
+          lastVisit: post.taken_at || post.publishedAt || post.createdAt,
+          postedDate: post.taken_at || post.publishedAt || post.createdAt,
+          username: post.author?.name ? `@${post.author.name}` : '',
+          rating: 0,
+          address: post.address || '',
+          isClosed: post.is_closed || false,
+          geo: geo,
         } as Story;
       });
-    }
+    },
   });
 };

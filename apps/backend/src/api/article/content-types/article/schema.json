@@ -134,15 +134,13 @@
     },
     "posts": {
       "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::post.post",
-      "mappedBy": "articles"
+      "relation": "oneToMany",
+      "target": "api::post.post"
     },
     "reels": {
       "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::reel.reel",
-      "mappedBy": "articles"
+      "relation": "oneToMany",
+      "target": "api::reel.reel"
     },
     "append_article": {
       "type": "relation",

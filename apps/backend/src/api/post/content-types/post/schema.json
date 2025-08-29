@@ -41,12 +41,6 @@
       "relation": "manyToOne",
       "target": "api::author.author"
     },
-    "articles": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::article.article",
-      "inversedBy": "posts"
-    },
     "slug": {
       "type": "uid",
       "targetField": "caption"
@@ -93,6 +87,10 @@
       "relation": "manyToMany",
       "target": "api::tag.tag",
       "inversedBy": "posts"
+    },
+    "location": {
+      "type": "customField",
+      "customField": "plugin::google-maps.location-picker"
     }
   }
 }
