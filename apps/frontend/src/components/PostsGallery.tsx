@@ -108,7 +108,7 @@ function PostCard({ post, onSelect, formatDate, renderStars }: {
       className={`relative z-0 hover:z-20 group cursor-pointer transition-transform hover:scale-105 duration-200 ${post.isClosed ? 'opacity-80' : ''}`}
       onClick={() => onSelect && onSelect(post)}
     >
-      <div ref={wrapRef} className="relative aspect-[1/1] overflow-hidden">
+      <div ref={wrapRef} className="relative aspect-[3/4] overflow-hidden">
         {/* Thumbnail Image */}
         <img src={post.thumbnail} alt={post.title} className={`w-full h-full object-cover ${post.isClosed ? 'grayscale' : ''}`} />
 
