@@ -27,8 +27,6 @@ const MapView = () => {
   const location = useLocation();
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [selectedPanelId, setSelectedPanelId] = useState<string | undefined>(undefined);
-  // Track when we want the Map component to apply marker centering offset
-  const [shouldOffsetExternalCenter, setShouldOffsetExternalCenter] = useState(false);
   // Ref to trigger marker recentering after story selection from global map
   const [shouldTriggerMarkerClick, setShouldTriggerMarkerClick] = useState(false);
   // Fit-to-results bounds (precise fit) when user presses Enter in search
@@ -290,10 +288,8 @@ const MapView = () => {
     if (!q || q.length < 3 || !strongMatchStoryId) return;
     const st = (stories || []).find(s => s.id === strongMatchStoryId);
     if (st?.geo) {
-      // Use original coordinates and let the Map component apply the marker offset
+      // Use original coordinates (programmatic click will handle centering)
       setMapView({ center: st.geo, zoom: 16 });
-      setShouldOffsetExternalCenter(true);
-      setTimeout(() => setShouldOffsetExternalCenter(false), 100);
     }
   }, [q, strongMatchStoryId]);
 
@@ -317,10 +313,8 @@ const MapView = () => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
     if (isMobile) return;
     if (selectedStory?.geo && lastSelectSourceRef.current === 'marker') {
-      // Use original coordinates and let the Map component apply the marker offset
+      // Use original coordinates and center normally (programmatic click will handle the offset)
       setMapView({ center: selectedStory.geo, zoom: 16 });
-      setShouldOffsetExternalCenter(true);
-      setTimeout(() => setShouldOffsetExternalCenter(false), 100);
       try { writeMv(selectedStory.geo, 16); } catch {}
     }
   }, [selectedStory?.id])
@@ -355,10 +349,8 @@ const MapView = () => {
         // Do not recenter the map on mobile when opening from URL
         const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
         if (!isMobile && found.geo) {
-          // Use original coordinates and let the Map component apply the marker offset  
+          // Use original coordinates (programmatic click will handle centering)
           setMapView({ center: found.geo, zoom: 16 });
-          setShouldOffsetExternalCenter(true);
-          setTimeout(() => setShouldOffsetExternalCenter(false), 100);
         }
       }
     }
@@ -472,7 +464,6 @@ const MapView = () => {
                   fitPadding={40}
                   clusterAnimate={clusterAnim}
                   centerOffsetPixels={{ x: 0, y: -60 }}
-                  offsetExternalCenter={shouldOffsetExternalCenter}
                   triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
                 />
                 {/* Mobile-only zoom controls: bottom-right vertical + / - */}
@@ -520,7 +511,6 @@ const MapView = () => {
                   }}
                   clusterAnimate={clusterAnim}
                   centerOffsetPixels={{ x: 0, y: -95 }}
-                  offsetExternalCenter={shouldOffsetExternalCenter}
                   triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
                 />
               </div>
@@ -609,7 +599,6 @@ const MapView = () => {
                 fitPadding={viewport.w < 768 ? 40 : (viewport.w/viewport.h >= 1.4 ? 120 : 80)}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
-                offsetExternalCenter={shouldOffsetExternalCenter}
                 triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
               />
                 {/* Zoom controls: bottom-right vertical + / - */}
@@ -652,7 +641,6 @@ const MapView = () => {
                       fitBounds={fitToBounds}
                       clusterAnimate={clusterAnim}
                       centerOffsetPixels={{ x: 0, y: -95 }}
-                      offsetExternalCenter={shouldOffsetExternalCenter}
                       triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
                     />
                   </div>
@@ -729,7 +717,6 @@ const MapView = () => {
                 fitBounds={fitToBounds}
                 clusterAnimate={clusterAnim}
                 centerOffsetPixels={{ x: 0, y: -95 }}
-                offsetExternalCenter={shouldOffsetExternalCenter}
                 triggerMarkerClickForStoryId={shouldTriggerMarkerClick ? selectedStory?.id : undefined}
               />
                 {/* Zoom controls: bottom-right vertical + / - */}

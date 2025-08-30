@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Grid3X3, X, ChevronDown, ChevronUp, Pause, Play, Volume2, VolumeX, ChevronsUp } from "lucide-react";
 import { StoryPanel } from "./StoryPanel";
 import { ProgressBar } from "./ProgressBar";
@@ -7,9 +7,9 @@ import { StoryGalleryOverlay } from "./StoryGalleryOverlay";
 import { StoryMetadata } from "./StoryMetadata";
 import { Story } from "@/types/story";
 import { useSwipeGestures } from "@/hooks/useSwipeGestures";
-import { useSwipeAnimation } from "@/hooks/useSwipeAnimation";
+import { useMobileSwipeGestures } from "@/hooks/useMobileSwipeGestures";
 import { getMute, setMute } from "@/lib/muteBus";
-import { animated } from 'react-spring';
+import { animated } from '@react-spring/web';
 
 interface TwoPanelStoryViewerProps {
   initialStoryId?: string;
@@ -376,73 +376,62 @@ export const TwoPanelStoryViewer = ({
   // Intentionally do not subscribe to global mute while the viewer is open;
   // the local toggle controls the global bus, not the other way around.
 
-  // Mobile swipe gesture support with animations
-  const mobileSwipeAnimation = useSwipeAnimation({
-    onSwipeUp: () => {
-      if (!showMetadataPanel && !selectedHighlightId) {
-        setShowMetadataPanel(true);
-      }
-    },
-    onSwipeDown: () => {
-      if (showMetadataPanel) {
-        setShowMetadataPanel(false);
-      } else if (!selectedHighlightId && onClose) {
-        onClose();
-      }
-    },
-    onSwipeLeft: () => {
-      // Swipe left = next article (user requirement)
-      if (selectedHighlightId) {
-        goToNextHighlight();
-      } else {
-        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-        const shouldAdvanceStory = advanceStoryOnMobile && isMobile;
-        
-        console.log('Mobile swipe left', {
-          advanceStoryOnMobile,
-          isMobile, 
-          shouldAdvanceStory
-        });
-        
-        if (shouldAdvanceStory) {
-          // Gallery mobile: story navigation
-          goToNextStoryMobileSwipe();
-        } else {
-          // Map view or desktop: panel navigation  
-          goToNextPanel();
-        }
-      }
-    },
-    onSwipeRight: () => {
-      // Swipe right = previous article (user requirement)  
-      if (selectedHighlightId) {
-        goToPreviousHighlight();
-      } else {
-        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-        const shouldAdvanceStory = advanceStoryOnMobile && isMobile;
-        
-        console.log('Mobile swipe right', {
-          advanceStoryOnMobile,
-          isMobile,
-          shouldAdvanceStory
-        });
-        
-        if (shouldAdvanceStory) {
-          // Gallery mobile: story navigation
-          goToPreviousStoryMobileSwipe();
-        } else {
-          // Map view or desktop: panel navigation
-          goToPreviousPanel();
-        }
-      }
-    },
-  });
-
   // Desktop swipe gesture support for story panel only (keep old system for desktop)
   const desktopSwipeHandlers = useSwipeGestures({
     onSwipeLeft: goToNextPanel,
     onSwipeRight: goToPreviousPanel,
   });
+
+  // Memoize mobile swipe callbacks to prevent hook recreation
+  const mobileSwipeCallbacks = useMemo(() => ({
+    onSwipeLeft: () => {
+      // Go to next story (swipe left = next)
+      if (currentStoryIndex < stories.length - 1) {
+        setCurrentStoryIndex(currentStoryIndex + 1);
+        setCurrentPanelIndex(0);
+      }
+    },
+    onSwipeRight: () => {
+      // Go to previous story (swipe right = previous)
+      if (currentStoryIndex > 0) {
+        setCurrentStoryIndex(currentStoryIndex - 1);
+        setCurrentPanelIndex(0);
+      }
+    },
+    onSwipeUp: () => {
+      // Drawer opening is handled by the hook
+      console.log('Swipe up detected - drawer should be opening');
+    },
+    onSwipeDown: () => {
+      // Drawer closing is handled by the hook
+      console.log('Swipe down detected - drawer should be closing');
+    }
+  }), [currentStoryIndex, stories.length]);
+
+  // Mobile swipe gestures with animations
+  // Drawer target height on mobile: 40% of viewport height
+  const [mobileDrawerHeight, setMobileDrawerHeight] = useState<number>(() => {
+    try { return Math.round(window.innerHeight * 0.4); } catch { return 300; }
+  });
+
+  useEffect(() => {
+    const onResize = () => {
+      try { setMobileDrawerHeight(Math.round(window.innerHeight * 0.4)); } catch {}
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const mobileSwipeGestures = useMobileSwipeGestures(mobileSwipeCallbacks, mobileDrawerHeight);
+
+  // Sync the drawer state with the component state - DISABLED for now
+  // useEffect(() => {
+  //   if (showMetadataPanel && !mobileSwipeGestures.isDrawerOpen) {
+  //     mobileSwipeGestures.openDrawer();
+  //   } else if (!showMetadataPanel && mobileSwipeGestures.isDrawerOpen) {
+  //     mobileSwipeGestures.closeDrawer();
+  //   }
+  // }, [showMetadataPanel, mobileSwipeGestures]);
 
   // Keyboard arrow navigation
   useEffect(() => {
@@ -620,22 +609,21 @@ export const TwoPanelStoryViewer = ({
 
   const mobileLayout = (
     <animated.div 
-      {...mobileSwipeAnimation.bind()}
+      {...mobileSwipeGestures.mobileGesture()}
       className="fixed inset-0 overflow-hidden"
       style={{ 
         height: '100svh', 
         touchAction: 'none',
-        x: mobileSwipeAnimation.style.x,
-        y: mobileSwipeAnimation.style.y,
-        rotateZ: mobileSwipeAnimation.style.rotateZ,
-        scale: mobileSwipeAnimation.style.scale,
-        opacity: mobileSwipeAnimation.style.opacity
+        x: mobileSwipeGestures.storyStyle.x,
+        scale: mobileSwipeGestures.storyStyle.scale,
+        opacity: mobileSwipeGestures.storyStyle.opacity
       }}
       ref={containerRef}
       onWheel={(e) => {
+        // Wheel handler disabled to avoid conflicts with mobile gestures
         // Allow opening with either direction to match user expectation
-        if (!showMetadataPanel && (e.deltaY < -30 || e.deltaY > 60)) setShowMetadataPanel(true);
-        if (showMetadataPanel && e.deltaY > 30) setShowMetadataPanel(false);
+        // if (!showMetadataPanel && (e.deltaY < -30 || e.deltaY > 60)) setShowMetadataPanel(true);
+        // if (showMetadataPanel && e.deltaY > 30) setShowMetadataPanel(false);
       }}
     >
       <div className="absolute top-0 left-0 right-0 z-20 p-4">
@@ -699,8 +687,13 @@ export const TwoPanelStoryViewer = ({
         onMouseDown={(e) => { if (!isControlTarget(e) && withinPlayPauseZone(e, (e.currentTarget as HTMLElement))) setHoldPaused(true); }}
         onMouseUp={() => setHoldPaused(false)}
         onMouseLeave={() => setHoldPaused(false)}
-        onTouchStart={(e) => { if (!isControlTarget(e) && withinPlayPauseZone(e, (e.currentTarget as HTMLElement))) setHoldPaused(true); }}
-        onTouchEnd={() => setHoldPaused(false)}
+        onTouchStart={(e) => { 
+          // Handle pause functionality but don't prevent event propagation for swipes
+          if (!isControlTarget(e) && withinPlayPauseZone(e, (e.currentTarget as HTMLElement))) setHoldPaused(true); 
+        }}
+        onTouchEnd={(e) => { 
+          setHoldPaused(false);
+        }}
         onTouchCancel={() => setHoldPaused(false)}
       >
         <div style={{ width: '56.25vh', height: '100vh' }} className="flex items-center justify-center">
@@ -756,16 +749,22 @@ export const TwoPanelStoryViewer = ({
         )}
       </div>
 
-      <div 
-        className={`absolute bottom-0 left-0 right-0 bg-white transition-transform duration-300 ease-out z-40 ${
-          showMetadataPanel ? 'transform translate-y-0' : 'transform translate-y-full'
-        }`}
-        style={{ height: '50vh' }}
+      <animated.div 
+        className="absolute left-0 right-0 bg-white z-40 rounded-t-lg shadow-lg"
+        style={{ 
+          height: `${mobileDrawerHeight}px`,
+          y: mobileSwipeGestures.drawerStyle.y,
+          bottom: 0
+        }}
       >
-        <div className="p-4 h-full overflow-y-auto">
-          <div className="flex justify-end items-center mb-2">
+        {/* Drag handle area to initiate close gesture */}
+        <div className="w-full flex flex-col items-center pt-2" data-drawer-handle="true">
+          <div className="h-1.5 w-12 rounded-full bg-gray-300" />
+        </div>
+        <div className="p-4 h-[calc(100%-16px)] overflow-y-auto" style={{ touchAction: 'auto' }}>
+          <div className="flex justify-end items-center mb-2" data-drawer-handle="true">
             <button
-              onClick={() => setShowMetadataPanel(false)}
+              onClick={() => mobileSwipeGestures.closeDrawer()}
               className="p-2 rounded-full hover:bg-gray-100"
             >
               <ChevronDown size={20} />
@@ -777,7 +776,7 @@ export const TwoPanelStoryViewer = ({
             onHighlightSelect={handleHighlightSelect}
           />
         </div>
-      </div>
+      </animated.div>
 
       {showGallery && (
         <StoryGalleryOverlay

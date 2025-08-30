@@ -149,18 +149,6 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
                 onEnded={() => onVideoEnded?.()}
               />
             )}
-            {/* Play overlay when paused */}
-            {panel.media && pausedInternal && (
-              <button
-                onClick={(e) => { e.stopPropagation(); try { videoRef.current?.play(); } catch {} }}
-                className="absolute inset-0 flex items-center justify-center z-20"
-                aria-label="Play video"
-              >
-                <span className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
-                  <img src="/icons/play.svg" alt="Play" className="w-8 h-8" />
-                </span>
-              </button>
-            )}
             {/* Mute button rendered by parent for consistent alignment across layouts */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             {(panel.title || panel.content) && (
