@@ -1,7 +1,5 @@
-
 import { useRef, useState, useEffect } from "react";
 import Hls from "hls.js";
-import { Volume2, VolumeX } from "lucide-react";
 import { StoryPanelData } from "@/types/story";
 import { getMute, setMute } from "@/lib/muteBus";
 
@@ -14,42 +12,108 @@ interface StoryPanelProps {
   onVideoEnded?: () => void;
 }
 
-export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoMeta, onVideoTime, onVideoEnded }: StoryPanelProps) => {
+export const StoryPanel = ({
+  panel,
+  paused = false,
+  externalMuteToggle,
+  onVideoMeta,
+  onVideoTime,
+  onVideoEnded,
+}: StoryPanelProps) => {
   // Persist mute state for the session; default to true (muted) at session start
   const [muted, setMuted] = useState<boolean>(getMute());
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Lazily load/unload the media while in/out of viewport
+  const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
   const [pausedInternal, setPausedInternal] = useState(true);
 
+  // Keep a ref to the current Hls instance (if any) so we can cleanly destroy it
+  const hlsRef = useRef<Hls | null>(null);
+
+  // Observe visibility to decide when to load/unload the source
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    let hls: Hls | null = null;
-    if (panel.media) {
-      if (panel.media.endsWith('.m3u8')) {
-        if (v.canPlayType('application/vnd.apple.mpegURL')) {
-          v.src = panel.media;
-        } else if (Hls.isSupported()) {
-          hls = new Hls();
-          hls.loadSource(panel.media);
-          hls.attachMedia(v);
-        } else {
-          v.src = panel.media;
-        }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVideoSrc(panel.media);
       } else {
-        v.src = panel.media;
+        setVideoSrc(undefined);
       }
-    }
-    const pref = getMute();
-    setMuted(pref);
-    v.muted = pref;
-    v.play().then(() => setPausedInternal(false)).catch(() => {
-      // Autoplay might be blocked until user interacts
-      setPausedInternal(true);
     });
-    return () => { hls?.destroy(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    observer.observe(v);
+    return () => observer.disconnect();
   }, [panel.media]);
 
+  // Handle (re)loading the video when videoSrc changes (includes HLS support)
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    // Cleanup any previous HLS instance
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.detachMedia();
+        hlsRef.current.destroy();
+      } catch {}
+      hlsRef.current = null;
+    }
+
+    if (videoSrc) {
+      const isHls = /\.m3u8($|\?)/i.test(videoSrc);
+      const pref = getMute();
+      setMuted(pref);
+      v.muted = pref;
+
+      // Assign source depending on HLS capability
+      if (isHls) {
+        if (v.canPlayType("application/vnd.apple.mpegURL")) {
+          // Native HLS (Safari/iOS)
+          v.src = videoSrc;
+        } else if (Hls.isSupported()) {
+          // hls.js
+          const hls = new Hls();
+          hlsRef.current = hls;
+          hls.loadSource(videoSrc);
+          hls.attachMedia(v);
+        } else {
+          // Fallback: set as src anyway (some browsers/extensions might still handle)
+          v.src = videoSrc;
+        }
+      } else {
+        v.src = videoSrc;
+      }
+
+      // Try to autoplay; if blocked, mark as paused
+      v.play()
+        .then(() => setPausedInternal(false))
+        .catch(() => setPausedInternal(true));
+    } else {
+      // No source: pause and completely unload the element
+      try {
+        v.pause();
+      } catch {}
+      v.removeAttribute("src");
+      v.load();
+      setPausedInternal(true);
+    }
+
+    // On source change/unmount, clean HLS
+    return () => {
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.detachMedia();
+          hlsRef.current.destroy();
+        } catch {}
+        hlsRef.current = null;
+      }
+    };
+  }, [videoSrc]);
+
+  // Mute toggle from inside the component (optional hook if you add a button here)
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
     const v = videoRef.current;
@@ -57,7 +121,9 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
     const next = !muted;
     setMuted(next);
     v.muted = next;
-    try { setMute(next); } catch {}
+    try {
+      setMute(next);
+    } catch {}
     if (!next) {
       // Ensure playback resumes with audio after a user gesture
       v.play().catch(() => {});
@@ -70,24 +136,35 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
     if (externalMuteToggle == null) return;
     if (lastToggleRef.current === externalMuteToggle) return;
     lastToggleRef.current = externalMuteToggle;
+
     const v = videoRef.current;
     const target = getMute();
     setMuted(target);
     if (v) v.muted = target;
-    if (!target) { try { v?.play(); } catch {} }
-  }, [externalMuteToggle]);
+    if (videoSrc && !target) {
+      try {
+        v?.play();
+      } catch {}
+    }
+  }, [externalMuteToggle, videoSrc]);
 
   // React to external pause/resume
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || !videoSrc) return;
     if (paused) {
-      try { v.pause(); } catch {}
+      try {
+        v.pause();
+      } catch {}
       setPausedInternal(true);
     } else {
-      v.play().then(() => setPausedInternal(false)).catch(() => {/* ignore */});
+      v.play()
+        .then(() => setPausedInternal(false))
+        .catch(() => {
+          /* ignore */
+        });
     }
-  }, [paused]);
+  }, [paused, videoSrc]);
 
   const renderContent = () => {
     switch (panel.type) {
@@ -136,35 +213,34 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
         );
 
       case "video":
+        // Note: src is set programmatically in the effect for HLS/native; keeping the attribute
+        // on the element isn't required, but harmless for non-HLS cases.
         return (
           <div className="relative md:h-full">
-            {panel.media && (
-              <video
-                className="w-full h-full object-cover"
-                ref={videoRef}
-                data-role="main-video"
-                autoPlay
-                muted={muted}
-                preload="auto"
-                playsInline
-                onLoadedMetadata={(e) => {
-                  const v = e.currentTarget;
-                  if (v && isFinite(v.duration) && v.duration > 0) {
-                    onVideoMeta?.(v.duration);
-                  }
-                }}
-                onTimeUpdate={(e) => {
-                  const v = e.currentTarget;
-                  if (v && isFinite(v.duration) && v.duration > 0) {
-                    onVideoTime?.(v.currentTime, v.duration);
-                  }
-                }}
-                onPlay={() => setPausedInternal(false)}
-                onPause={() => setPausedInternal(true)}
-                onEnded={() => onVideoEnded?.()}
-              />
-            )}
-            {/* Mute button rendered by parent for consistent alignment across layouts */}
+            <video
+              className="w-full h-full object-cover"
+              ref={videoRef}
+              data-role="main-video"
+              autoPlay
+              muted={muted}
+              preload="auto"
+              playsInline
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                if (v && isFinite(v.duration) && v.duration > 0) {
+                  onVideoMeta?.(v.duration);
+                }
+              }}
+              onTimeUpdate={(e) => {
+                const v = e.currentTarget;
+                if (v && isFinite(v.duration) && v.duration > 0) {
+                  onVideoTime?.(v.currentTime, v.duration);
+                }
+              }}
+              onPlay={() => setPausedInternal(false)}
+              onPause={() => setPausedInternal(true)}
+              onEnded={() => onVideoEnded?.()}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             {(panel.title || panel.content) && (
               <div className="absolute bottom-0 left-0 right-0 p-8">
@@ -209,9 +285,5 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
     }
   };
 
-  return (
-    <div className="w-full h-full animate-fade-in">
-      {renderContent()}
-    </div>
-  );
+  return <div className="w-full h-full animate-fade-in">{renderContent()}</div>;
 };

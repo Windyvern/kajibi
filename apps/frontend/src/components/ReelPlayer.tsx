@@ -16,6 +16,7 @@ export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: Reel
   const [isMuted, setIsMuted] = useState<boolean>(getMute());
   const [progress, setProgress] = useState<number>(0); // 0..1
   const [duration, setDuration] = useState<number>(0);
+  const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -62,10 +63,10 @@ export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: Reel
 
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || !videoSrc) return;
     v.muted = isMuted;
     if (isPlaying) { try { v.play(); } catch {} } else { try { v.pause(); } catch {} }
-  }, [isPlaying, isMuted]);
+  }, [isPlaying, isMuted, videoSrc]);
 
   const togglePlay = () => setIsPlaying(p => !p);
   const toggleMute = () => {
@@ -84,6 +85,34 @@ export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: Reel
     if (!v || !duration) return;
     try { v.currentTime = Math.max(0, Math.min(1, x)) * duration; } catch {}
   };
+
+  // Observe viewport visibility to load/unload the video
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVideoSrc(src);
+      } else {
+        setVideoSrc(undefined);
+      }
+    });
+    observer.observe(v);
+    return () => observer.disconnect();
+  }, [src]);
+
+  // Handle unloading when src toggles off
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (!videoSrc) {
+      try { v.pause(); } catch {}
+      v.removeAttribute("src");
+      v.load();
+      setProgress(0);
+      setDuration(0);
+    }
+  }, [videoSrc]);
 
   return (
     <div className="relative w-full h-full bg-black">
@@ -111,6 +140,8 @@ export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: Reel
       {/* Video */}
       <video
         ref={videoRef}
+        src={videoSrc}
+        reels-integration
         className="w-full h-full object-contain"
         playsInline
         loop
