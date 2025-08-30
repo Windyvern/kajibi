@@ -17,22 +17,43 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
   // Persist mute state for the session; default to true (muted) at session start
   const [muted, setMuted] = useState<boolean>(getMute());
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
   const [pausedInternal, setPausedInternal] = useState(true);
 
+  // Load/unload video based on viewport visibility
   useEffect(() => {
-    // On media change, respect session preference (default muted)
-    const pref = getMute();
-    setMuted(pref);
-    if (videoRef.current) videoRef.current.muted = pref;
-    // Attempt autoplay muted on mount/change
-    if (videoRef.current) {
-      videoRef.current.play().then(() => setPausedInternal(false)).catch(() => {
-        // Autoplay might be blocked until user interacts
+    const v = videoRef.current;
+    if (!v) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVideoSrc(panel.media);
+      } else {
+        setVideoSrc(undefined);
+      }
+    });
+    observer.observe(v);
+    return () => observer.disconnect();
+  }, [panel.media]);
+
+  // React when the video source is toggled
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (videoSrc) {
+      const pref = getMute();
+      setMuted(pref);
+      v.muted = pref;
+      v.play().then(() => setPausedInternal(false)).catch(() => {
         setPausedInternal(true);
       });
+    } else {
+      try { v.pause(); } catch {}
+      v.removeAttribute("src");
+      v.load();
+      setPausedInternal(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel.media]);
+  }, [videoSrc]);
 
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -58,20 +79,20 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
     const target = getMute();
     setMuted(target);
     if (v) v.muted = target;
-    if (!target) { try { v?.play(); } catch {} }
-  }, [externalMuteToggle]);
+    if (videoSrc && !target) { try { v?.play(); } catch {} }
+  }, [externalMuteToggle, videoSrc]);
 
   // React to external pause/resume
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || !videoSrc) return;
     if (paused) {
       try { v.pause(); } catch {}
       setPausedInternal(true);
     } else {
       v.play().then(() => setPausedInternal(false)).catch(() => {/* ignore */});
     }
-  }, [paused]);
+  }, [paused, videoSrc]);
 
   const renderContent = () => {
     switch (panel.type) {
@@ -122,33 +143,31 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
       case "video":
         return (
           <div className="relative md:h-full">
-            {panel.media && (
-              <video
-                src={panel.media}
-                className="w-full h-full object-cover"
-                ref={videoRef}
-                data-role="main-video"
-                autoPlay
-                muted={muted}
-                preload="auto"
-                playsInline
-                onLoadedMetadata={(e) => {
-                  const v = e.currentTarget;
-                  if (v && isFinite(v.duration) && v.duration > 0) {
-                    onVideoMeta?.(v.duration);
-                  }
-                }}
-                onTimeUpdate={(e) => {
-                  const v = e.currentTarget;
-                  if (v && isFinite(v.duration) && v.duration > 0) {
-                    onVideoTime?.(v.currentTime, v.duration);
-                  }
-                }}
-                onPlay={() => setPausedInternal(false)}
-                onPause={() => setPausedInternal(true)}
-                onEnded={() => onVideoEnded?.()}
-              />
-            )}
+            <video
+              src={videoSrc}
+              className="w-full h-full object-cover"
+              ref={videoRef}
+              data-role="main-video"
+              autoPlay
+              muted={muted}
+              preload="auto"
+              playsInline
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                if (v && isFinite(v.duration) && v.duration > 0) {
+                  onVideoMeta?.(v.duration);
+                }
+              }}
+              onTimeUpdate={(e) => {
+                const v = e.currentTarget;
+                if (v && isFinite(v.duration) && v.duration > 0) {
+                  onVideoTime?.(v.currentTime, v.duration);
+                }
+              }}
+              onPlay={() => setPausedInternal(false)}
+              onPause={() => setPausedInternal(true)}
+              onEnded={() => onVideoEnded?.()}
+            />
             {/* Mute button rendered by parent for consistent alignment across layouts */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             {(panel.title || panel.content) && (
