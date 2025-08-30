@@ -177,6 +177,53 @@ const resolveProfileMedia = async (tmpBase: string, rel: string): Promise<string
   return null;
 };
 
+const getVideoDimensions = async (p: string): Promise<{ width: number; height: number }> => {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', p]);
+    const [w, h] = stdout.trim().split('x').map((n) => parseInt(n, 10));
+    return { width: w || 0, height: h || 0 };
+  } catch {
+    return { width: 0, height: 0 };
+  }
+};
+
+const createVideoVariants = async (strapi: any, absVideo: string, file: any) => {
+  const variants = [
+    { key: '480p', height: 480, bitrate: '800k' },
+    { key: '720p', height: 720, bitrate: '1500k' },
+  ];
+  const publicDir = (strapi.dirs && (strapi.dirs as any).public) || path.join(process.cwd(), 'public');
+  const relUrl = file?.url || '';
+  const relDir = relUrl.startsWith('/') ? path.posix.dirname(relUrl.slice(1)) : path.posix.dirname(relUrl);
+  const formats = (file && file.formats) ? { ...file.formats } : {};
+  for (const v of variants) {
+    if (formats[v.key]) continue;
+    const name = `${file.hash}-${v.key}${file.ext}`;
+    const destPath = path.join(publicDir, relDir, name);
+    try {
+      await execFileAsync('ffmpeg', ['-y', '-i', absVideo, '-vf', `scale=-2:${v.height}`, '-b:v', v.bitrate, destPath]);
+      const st = await fs.promises.stat(destPath);
+      const { width, height } = await getVideoDimensions(destPath);
+      const url = `/${path.posix.join(relDir, name)}`;
+      formats[v.key] = {
+        ext: file.ext,
+        mime: file.mime,
+        size: st.size / 1024,
+        width,
+        height,
+        hash: `${file.hash}-${v.key}`,
+        name,
+        path: null,
+        url,
+      };
+    } catch {}
+  }
+  try {
+    await strapi.entityService.update('plugin::upload.file', file.id, { data: { formats } });
+    file.formats = formats;
+  } catch {}
+};
+
 const pickJsonPath = async (contentDir: string, base: string): Promise<string | null> => {
   const names = [
     `${base}.json`,
@@ -503,6 +550,7 @@ const processCategory = async (
               const tmpThumb = path.join(TMP_ROOT, `post-thumb-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
               try {
                 await execFileAsync('ffmpeg', ['-y', '-ss', '1', '-i', absVideo, '-vframes', '1', '-vf', 'scale=640:-1', tmpThumb]);
+                await createVideoVariants(strapi, absVideo, createdFile);
                 await uploadThumbAndAttach(tmpThumb);
               } catch {}
             }
@@ -521,8 +569,12 @@ const processCategory = async (
                 const tmpThumb = path.join(TMP_ROOT, `reel-thumb-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
                 try {
                   await execFileAsync('ffmpeg', ['-y', '-ss', '1', '-i', absVideo, '-vframes', '1', '-vf', 'scale=640:-1', tmpThumb]);
+                  await createVideoVariants(strapi, absVideo, createdFile);
                   await uploadThumbAndAttach(tmpThumb);
                 } catch {}
+              } else if (isUploadedVideo && typeof videoUrl === 'string') {
+                const absVideo = path.join(publicDir, videoUrl.startsWith('/') ? videoUrl.slice(1) : videoUrl);
+                await createVideoVariants(strapi, absVideo, createdFile);
               }
             } catch {}
           }
@@ -667,6 +719,7 @@ const processCategory = async (
                 } catch {
                   await execFileAsync('ffmpeg', ['-y', '-ss', '1', '-i', absVideo, '-vframes', '1', '-vf', 'scale=640:-1', tmpThumb]);
                 }
+                await createVideoVariants(strapi, absVideo, createdFile);
                 const st2 = await fs.promises.stat(tmpThumb);
                 const filesThumb = [{ path: tmpThumb, filepath: tmpThumb, tmpPath: tmpThumb, name: path.basename(tmpThumb), type: 'image/jpeg', mime: 'image/jpeg', size: st2.size, stream: fs.createReadStream(tmpThumb) }];
                 const createdThumb = await strapi.plugin('upload').service('upload').upload({ data: {}, files: filesThumb });
