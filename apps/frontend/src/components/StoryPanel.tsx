@@ -1,5 +1,6 @@
 
 import { useRef, useState, useEffect } from "react";
+import Hls from "hls.js";
 import { Volume2, VolumeX } from "lucide-react";
 import { StoryPanelData } from "@/types/story";
 import { getMute, setMute } from "@/lib/muteBus";
@@ -20,17 +21,32 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
   const [pausedInternal, setPausedInternal] = useState(true);
 
   useEffect(() => {
-    // On media change, respect session preference (default muted)
+    const v = videoRef.current;
+    if (!v) return;
+    let hls: Hls | null = null;
+    if (panel.media) {
+      if (panel.media.endsWith('.m3u8')) {
+        if (v.canPlayType('application/vnd.apple.mpegURL')) {
+          v.src = panel.media;
+        } else if (Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(panel.media);
+          hls.attachMedia(v);
+        } else {
+          v.src = panel.media;
+        }
+      } else {
+        v.src = panel.media;
+      }
+    }
     const pref = getMute();
     setMuted(pref);
-    if (videoRef.current) videoRef.current.muted = pref;
-    // Attempt autoplay muted on mount/change
-    if (videoRef.current) {
-      videoRef.current.play().then(() => setPausedInternal(false)).catch(() => {
-        // Autoplay might be blocked until user interacts
-        setPausedInternal(true);
-      });
-    }
+    v.muted = pref;
+    v.play().then(() => setPausedInternal(false)).catch(() => {
+      // Autoplay might be blocked until user interacts
+      setPausedInternal(true);
+    });
+    return () => { hls?.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel.media]);
 
@@ -124,7 +140,6 @@ export const StoryPanel = ({ panel, paused = false, externalMuteToggle, onVideoM
           <div className="relative md:h-full">
             {panel.media && (
               <video
-                src={panel.media}
                 className="w-full h-full object-cover"
                 ref={videoRef}
                 data-role="main-video"

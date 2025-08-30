@@ -7,6 +7,8 @@ function getMediaUrl(file: any): string | undefined {
   if (typeof file === 'string') {
     return `${STRAPI_URL}/uploads/${file}`;
   }
+  const hls = file?.hlsPlaylist || file?.formats?.hls?.url;
+  if (hls) return `${STRAPI_URL}${hls}`;
   const url = file?.url;
   if (url) return `${STRAPI_URL}${url}`;
   return undefined;
@@ -15,6 +17,7 @@ function getMediaUrl(file: any): string | undefined {
 function isVideoFile(file: any, url?: string): boolean {
   const mime = file?.mime;
   if (typeof mime === 'string' && mime.toLowerCase().includes('video')) return true;
+  if (file?.hlsPlaylist || file?.formats?.hls?.url) return true;
   const u = url || file?.url || '';
   return /\.(mp4|mov|webm)$/i.test(u);
 }
