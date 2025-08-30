@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Hls from 'hls.js';
 import { Pause, Play, Volume2, VolumeX, X } from 'lucide-react';
 import { getMute, setMute } from '@/lib/muteBus';
 
@@ -16,6 +17,29 @@ export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: Reel
   const [progress, setProgress] = useState<number>(0); // 0..1
   const [duration, setDuration] = useState<number>(0);
   const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    let hls: Hls | null = null;
+    if (src.endsWith('.m3u8')) {
+      if (v.canPlayType('application/vnd.apple.mpegurl')) {
+        v.src = src;
+      } else if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(src);
+        hls.attachMedia(v);
+      } else {
+        v.src = src;
+      }
+    } else {
+      v.src = src;
+    }
+    if (autoPlay) {
+      try { v.play(); } catch {}
+    }
+    return () => { hls?.destroy(); };
+  }, [src, autoPlay]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -117,6 +141,7 @@ export const ReelPlayer = ({ src, autoPlay = true, muted = true, onClose }: Reel
       <video
         ref={videoRef}
         src={videoSrc}
+        reels-integration
         className="w-full h-full object-contain"
         playsInline
         loop

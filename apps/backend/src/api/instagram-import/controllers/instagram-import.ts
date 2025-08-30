@@ -482,6 +482,31 @@ const processCategory = async (
         }
       } catch {}
       try { strapi.log.info(`[ig-import] uploaded file id=${createdFile?.id} name=${createdFile?.name}`); } catch {}
+      // Generate HLS playlist + segments for videos
+      if (isVideo) {
+        try {
+          const publicDir = (strapi.dirs && (strapi.dirs as any).public) || path.join(process.cwd(), 'public');
+          const hlsDir = path.join(publicDir, 'uploads', 'hls', String(createdFile.id));
+          await fs.promises.mkdir(hlsDir, { recursive: true });
+          const playlistPath = path.join(hlsDir, 'index.m3u8');
+          await execFileAsync('ffmpeg', [
+            '-y',
+            '-i', tmpOut,
+            '-codec', 'copy',
+            '-start_number', '0',
+            '-hls_time', '4',
+            '-hls_list_size', '0',
+            '-f', 'hls',
+            '-hls_segment_filename', path.join(hlsDir, 'seg%03d.ts'),
+            playlistPath,
+          ]);
+          const relPlaylist = `/uploads/hls/${createdFile.id}/index.m3u8`;
+          const formats = { ...(createdFile.formats || {}), hls: { url: relPlaylist, ext: '.m3u8', mime: 'application/vnd.apple.mpegurl' } };
+          await strapi.entityService.update('plugin::upload.file', createdFile.id, { data: { formats, hlsPlaylist: relPlaylist } });
+        } catch (e: any) {
+          try { strapi.log.warn(`[ig-import] hls generation failed: ${e?.message || e}`); } catch {}
+        }
+      }
       stats.uploaded += 1;
       stats.byCategory[catKey].uploaded += 1;
       if (onProgress) onProgress(stats.uploaded, stats.itemsTotal || 0);

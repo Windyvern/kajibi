@@ -9,6 +9,8 @@ function getMediaUrl(file: any): string | undefined {
   }
   // Support shapes: { data: { attributes: { url } } } or { attributes: { url } } or { url }
   const entry = file?.data?.attributes ? file.data : file;
+  const hls = entry?.attributes?.hlsPlaylist || entry?.hlsPlaylist || entry?.attributes?.formats?.hls?.url || entry?.formats?.hls?.url;
+  if (hls) return `${STRAPI_URL}${hls}`;
   const url = entry?.attributes?.url || entry?.url;
   if (url) return `${STRAPI_URL}${url}`;
   return undefined;
@@ -17,6 +19,8 @@ function getMediaUrl(file: any): string | undefined {
 function isVideoFile(file: any, url?: string): boolean {
   const mime = file?.data?.attributes?.mime || file?.mime;
   if (typeof mime === 'string' && mime.toLowerCase().includes('video')) return true;
+  const entry = file?.data?.attributes ? file.data : file;
+  if (entry?.hlsPlaylist || entry?.formats?.hls?.url) return true;
   const u = url || file?.data?.attributes?.url || file?.url || '';
   return /\.(mp4|mov|webm)$/i.test(u);
 }
